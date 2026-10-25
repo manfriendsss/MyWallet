@@ -25,6 +25,23 @@ interface ChatMessage {
 const iconButton =
   'grid h-10 w-10 shrink-0 place-items-center rounded-control text-muted hover:bg-paper-3 hover:text-ink transition-colors disabled:opacity-55';
 
+/** Which AI answers: DeepSeek in a blue outline, Gemini in a rainbow one */
+const ProviderPill: React.FC<{ provider: 'gemini' | 'deepseek' }> = ({ provider }) => {
+  const isGemini = provider === 'gemini';
+  return (
+    <span
+      className={cn(
+        'inline-flex shrink-0 rounded-full p-[1.5px]',
+        isGemini ? 'bg-[image:var(--gradient-rainbow)]' : 'bg-deepseek'
+      )}
+    >
+      <span className="rounded-full bg-surface px-2.5 py-0.5 text-xs font-semibold text-ink">
+        {isGemini ? 'Gemini' : 'DeepSeek'}
+      </span>
+    </span>
+  );
+};
+
 export const AiAssistantSheet: React.FC = () => {
   const {
     isAssistantOpen,
@@ -290,16 +307,12 @@ HÃY CẬP NHẬT LẠI VÀ CHỈ BÁO KẾT QUẢ NGẮN GỌN TRONG 1 CÂU THE
             className="relative flex h-[88dvh] w-full max-w-xl flex-col overflow-hidden rounded-t-card bg-surface shadow-[var(--shadow-overlay)] outline-none sm:h-[80dvh] sm:rounded-card"
           >
             {/* Header */}
-            <div className="flex items-start justify-between gap-4 border-b border-rule px-5 pt-5 pb-4">
-              <div className="min-w-0">
+            <div className="flex items-center justify-between gap-4 border-b border-rule px-5 pt-5 pb-4">
+              <div className="flex min-w-0 items-center gap-3">
                 <h2 id={titleId} className="text-lg text-ink">
                   Thêm giao dịch
                 </h2>
-                {hasCloudAi && (
-                  <p className="mt-0.5 text-sm text-muted">
-                    Trợ lý {aiSettings.provider === 'gemini' ? 'Gemini' : 'DeepSeek'}: nói, gõ hoặc chụp hóa đơn
-                  </p>
-                )}
+                {hasCloudAi && <ProviderPill provider={aiSettings.provider} />}
               </div>
               <button type="button" onClick={closeAssistant} aria-label="Đóng" className={cn(iconButton, '-mr-2 -mt-1')}>
                 <X className="w-5 h-5" aria-hidden="true" />
