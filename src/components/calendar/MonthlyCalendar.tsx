@@ -85,9 +85,20 @@ export const MonthlyCalendar: React.FC = () => {
   const isCurrentMonthView = isSameMonth(currentDate, new Date());
 
   return (
-    <div className="space-y-6">
+    <div className="relative space-y-6">
+      {/* Large, faded calendar art resting in the top-right corner, behind every word */}
+      <img
+        src={CARD_ART.calendar}
+        alt=""
+        aria-hidden="true"
+        decoding="async"
+        width={176}
+        height={176}
+        className="pointer-events-none absolute -right-2 -top-6 z-0 w-32 sm:-right-4 sm:-top-10 sm:w-44 select-none object-contain opacity-15 dark:opacity-10"
+      />
+
       {/* Month selector & totals */}
-      <div className="flex flex-wrap items-end justify-between gap-4">
+      <div className="relative z-[1] flex flex-wrap items-end justify-between gap-4">
         <div className="flex items-center gap-2">
           <button
             type="button"
@@ -115,7 +126,6 @@ export const MonthlyCalendar: React.FC = () => {
           )}
         </div>
 
-        <div className="flex w-full sm:w-auto items-end gap-6">
         <dl className="flex gap-6">
           <div>
             <dt className="text-sm text-muted">Thu</dt>
@@ -126,20 +136,10 @@ export const MonthlyCalendar: React.FC = () => {
             <dd className="figure text-lg font-bold text-expense">−{formatCompactCurrency(monthTotalExpense, 'VND')}</dd>
           </div>
         </dl>
-          <img
-            src={CARD_ART.calendar}
-            alt=""
-            aria-hidden="true"
-            decoding="async"
-            width={64}
-            height={64}
-            className="ml-auto h-12 w-12 sm:h-16 sm:w-16 object-contain drop-shadow-[0_6px_10px_var(--color-glow-1)]"
-          />
-        </div>
       </div>
 
       {/* Calendar Grid */}
-      <Card className="p-2 sm:p-4 overflow-hidden">
+      <Card className="relative z-[1] p-2 sm:p-4 overflow-hidden">
         <div className="grid grid-cols-7 text-center" aria-hidden="true">
           {weekDayHeaders.map((dayName) => (
             <div key={dayName} className="py-2 text-xs font-semibold text-muted">

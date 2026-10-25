@@ -2,9 +2,13 @@ import React from 'react';
 import { Sidebar } from './Sidebar';
 import { BottomNav } from './BottomNav';
 import { Header } from './Header';
+import { PullToRefresh } from './PullToRefresh';
+import { useWallet } from '../../context/WalletContext';
 
 export const AppLayout: React.FC<{ children: React.ReactNode }> = ({ children }) => {
+  const { refreshAll } = useWallet();
   return (
+    <PullToRefresh onRefresh={refreshAll}>
     <div className="relative flex min-h-dvh bg-paper text-ink">
       <div className="ambient" aria-hidden="true" />
 
@@ -29,5 +33,6 @@ export const AppLayout: React.FC<{ children: React.ReactNode }> = ({ children })
       {/* Mobile Bottom Bar */}
       <BottomNav />
     </div>
+    </PullToRefresh>
   );
 };

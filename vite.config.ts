@@ -41,4 +41,8 @@ export default defineConfig({
   build: {
     sourcemap: false,
   },
+  // `npm run dev` for the UI; the API runs in `wrangler pages dev dist` on 8788
+  server: {
+    proxy: { '/api': 'http://127.0.0.1:8788' },
+  },
 })

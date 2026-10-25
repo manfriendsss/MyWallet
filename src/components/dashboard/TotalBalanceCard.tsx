@@ -47,7 +47,7 @@ export const TotalBalanceCard: React.FC = () => {
         alt=""
         aria-hidden="true"
         decoding="async"
-        className="card-art right-2 top-3 w-24 sm:right-6 sm:top-4 sm:w-40 lg:w-48"
+        className="card-art -right-3 -top-2 z-0 w-32 opacity-35 sm:right-4 sm:top-2 sm:w-44 lg:w-52 dark:opacity-25"
       />
 
       <div className="relative z-[1]">
@@ -56,7 +56,7 @@ export const TotalBalanceCard: React.FC = () => {
         </h2>
 
         {/* The signature: one figure, set big */}
-        <p className="figure mt-2 max-w-[calc(100%-6rem)] sm:max-w-none text-[length:var(--text-figure)] font-bold leading-none tracking-[-0.02em] text-ink break-words">
+        <p className="figure mt-2 whitespace-nowrap text-[length:var(--text-figure)] font-bold leading-none tracking-[-0.02em] text-ink">
           {formatCurrency(totalBalanceVnd, 'VND')}
         </p>
 

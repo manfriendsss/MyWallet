@@ -1,5 +1,8 @@
 import React, { useState } from 'react';
-import { Moon, Sun, Monitor, Download, RotateCcw, Eye, EyeOff } from 'lucide-react';
+import { Moon, Sun, Monitor, Download, RotateCcw, Eye, EyeOff, LogOut, Cloud, KeyRound } from 'lucide-react';
+import { useAuth } from '../../context/AuthContext';
+import { ChangePasswordForm } from '../auth/AuthScreens';
+import type { SyncStatus } from '../../context/WalletContext';
 import { Select } from '../ui/Select';
 import { useWallet } from '../../context/WalletContext';
 import { useTheme } from '../../context/ThemeContext';
@@ -75,6 +78,65 @@ const KeyField: React.FC<{
         </button>
       </div>
     </div>
+  );
+};
+
+const SYNC_LABEL: Record<SyncStatus, { text: string; tone: string }> = {
+  loading: { text: 'Đang tải dữ liệu…', tone: 'text-muted' },
+  saving: { text: 'Đang lưu…', tone: 'text-muted' },
+  saved: { text: 'Đã đồng bộ', tone: 'text-income' },
+  error: { text: 'Chưa lưu được lên máy chủ, sẽ thử lại khi có thay đổi', tone: 'text-expense' },
+  offline: { text: 'Ngoại tuyến, chỉ lưu trên máy này', tone: 'text-warn' },
+};
+
+const AccountCard: React.FC = () => {
+  const { user, logout } = useAuth();
+  const { syncStatus } = useWallet();
+  const [changing, setChanging] = useState(false);
+  const [done, setDone] = useState(false);
+  const sync = SYNC_LABEL[syncStatus];
+
+  return (
+    <Card aria-labelledby="account-heading">
+      <CardHeader
+        id="account-heading"
+        title="Tài khoản"
+        description={user ? `Đăng nhập: ${user.username}` : 'Chưa đăng nhập'}
+        action={
+          user && (
+            <Button variant="outline" size="sm" onClick={() => void logout()}>
+              <LogOut className="w-4 h-4" aria-hidden="true" />
+              <span>Đăng xuất</span>
+            </Button>
+          )
+        }
+      />
+      <p className={cn('flex items-center gap-2 text-sm font-semibold', sync.tone)} role="status" aria-live="polite">
+        <Cloud className="w-4 h-4" aria-hidden="true" />
+        <span>{sync.text}</span>
+      </p>
+
+      {user && (
+        <div className="mt-4 border-t border-rule pt-4">
+          {changing ? (
+            <ChangePasswordForm
+              onDone={() => {
+                setChanging(false);
+                setDone(true);
+              }}
+            />
+          ) : (
+            <div className="flex flex-wrap items-center gap-3">
+              <Button variant="outline" onClick={() => { setChanging(true); setDone(false); }}>
+                <KeyRound className="w-4 h-4" aria-hidden="true" />
+                <span>Đổi mật khẩu</span>
+              </Button>
+              {done && <span className="text-sm font-semibold text-income">Đã đổi mật khẩu.</span>}
+            </div>
+          )}
+        </div>
+      )}
+    </Card>
   );
 };
 
@@ -184,6 +246,9 @@ export const SettingsView: React.FC = () => {
 
   return (
     <div className="mx-auto max-w-3xl space-y-6">
+      {/* 0. Account */}
+      <AccountCard />
+
       {/* 1. AI */}
       <Card aria-labelledby="ai-heading">
         <CardHeader
@@ -221,7 +286,7 @@ export const SettingsView: React.FC = () => {
             </div>
             <p className="hint">
               {keySource === 'server'
-                ? 'An toàn nhất: key là bí mật trên Cloudflare, trình duyệt không bao giờ thấy. Chỉ ai đăng nhập Cloudflare Access mới gọi được.'
+                ? 'An toàn nhất: key là bí mật trên Cloudflare, trình duyệt không bao giờ thấy. Chỉ tài khoản đã đăng nhập mới gọi được.'
                 : 'Key lưu trên máy này, không mã hóa. Chỉ nên dùng khi chưa cài máy chủ.'}
             </p>
           </fieldset>
@@ -314,7 +379,7 @@ export const SettingsView: React.FC = () => {
         <CardHeader
           id="data-heading"
           title="Dữ liệu"
-          description="Toàn bộ dữ liệu nằm trên trình duyệt này. Sao lưu định kỳ để không mất khi xóa dữ liệu trình duyệt."
+          description="Dữ liệu được lưu trên máy chủ (Cloudflare D1) và đồng bộ giữa các thiết bị. Bản sao lưu JSON để bạn giữ riêng."
         />
         <div className="flex flex-wrap gap-2">
           <Button variant="outline" onClick={handleExportData}>
@@ -327,7 +392,7 @@ export const SettingsView: React.FC = () => {
             onClick={() => {
               if (
                 window.confirm(
-                  'Xóa toàn bộ ví, giao dịch, tỷ giá và API key rồi nạp lại dữ liệu mẫu?\n\nKhông thể hoàn tác. Hãy tải bản sao lưu trước nếu cần.'
+                  'Xóa toàn bộ ví và giao dịch, trên máy này và trên máy chủ? Danh mục trở về mặc định.\n\nKhông thể hoàn tác. Hãy tải bản sao lưu trước nếu cần.'
                 )
               ) {
                 resetAllData();
@@ -335,7 +400,7 @@ export const SettingsView: React.FC = () => {
             }}
           >
             <RotateCcw className="w-4 h-4" aria-hidden="true" />
-            <span>Xóa và nạp dữ liệu mẫu</span>
+            <span>Xóa toàn bộ dữ liệu</span>
           </Button>
         </div>
       </Card>

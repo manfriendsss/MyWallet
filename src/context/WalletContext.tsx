@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useEffect, useState, useMemo } from 'react';
+import React, { createContext, useContext, useEffect, useRef, useState, useMemo } from 'react';
 import type {
   ActiveTab,
   AiSettings,
@@ -27,8 +27,10 @@ import {
   saveCategories,
   saveTransactions,
   recalculateWalletBalances,
+  INITIAL_CATEGORIES,
 } from '../services/storage';
 import { newId } from '../utils/date';
+import { dataApi, type SyncKey } from '../services/api';
 
 interface WalletContextType {
   // Navigation & UI state
@@ -68,12 +70,33 @@ interface WalletContextType {
   refreshExchangeRates: () => Promise<boolean>;
   updateAiSettings: (settings: Partial<AiSettings>) => void;
   resetAllData: () => void;
+  syncStatus: SyncStatus;
+  refreshAll: () => Promise<void>;
 }
 
 const WalletContext = createContext<WalletContextType | undefined>(undefined);
 
-export const WalletProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
+export type SyncStatus = 'loading' | 'saving' | 'saved' | 'error' | 'offline';
+
+/** The settings worth syncing across devices; API keys never leave this browser */
+function pickPreferences(s: Partial<AiSettings>): Partial<AiSettings> {
+  const out: Partial<AiSettings> = {};
+  if (s.provider === 'gemini' || s.provider === 'deepseek') out.provider = s.provider;
+  if (typeof s.geminiModel === 'string') out.geminiModel = s.geminiModel;
+  if (typeof s.deepseekModel === 'string') out.deepseekModel = s.deepseekModel;
+  if (s.keySource === 'server' || s.keySource === 'browser') out.keySource = s.keySource;
+  return out;
+}
+
+export const WalletProvider: React.FC<{ children: React.ReactNode; syncEnabled?: boolean }> = ({
+  children,
+  syncEnabled = false,
+}) => {
   const [activeTab, setActiveTab] = useState<ActiveTab>('dashboard');
+  const [syncStatus, setSyncStatus] = useState<SyncStatus>(syncEnabled ? 'loading' : 'offline');
+  // The server copy has been loaded (or seeded): from here on, local changes are pushed up
+  const syncedRef = useRef(false);
+  const lastPushed = useRef<Partial<Record<SyncKey, string>>>({});
   const [isAssistantOpen, setIsAssistantOpen] = useState<boolean>(false);
 
   const [isReady, setIsReady] = useState<boolean>(false);
@@ -83,14 +106,69 @@ export const WalletProvider: React.FC<{ children: React.ReactNode }> = ({ childr
   const [exchangeRates, setExchangeRatesState] = useState<ExchangeRates>(getStoredExchangeRates());
   const [aiSettings, setAiSettingsState] = useState<AiSettings>(getStoredAiSettings());
 
+  /**
+   * Load the account's data from the database (the source of truth; this browser keeps a cache).
+   * An empty account starts clean: no sample wallets or transactions, just the default categories.
+   */
+  const pullFromServer = async () => {
+    const { data: remote } = await dataApi.load();
+    const hasRemote = Array.isArray(remote.wallets?.value) || Array.isArray(remote.transactions?.value);
+    const next = hasRemote
+      ? recalculateWalletBalances(
+          (remote.wallets?.value as Wallet[]) ?? [],
+          (remote.transactions?.value as Transaction[]) ?? [],
+          (remote.categories?.value as Category[]) ?? INITIAL_CATEGORIES
+        )
+      : { wallets: [] as Wallet[], categories: INITIAL_CATEGORIES, transactions: [] as Transaction[] };
+
+    setWallets(next.wallets);
+    setCategories(next.categories);
+    setTransactions(next.transactions);
+    saveWallets(next.wallets);
+    saveCategories(next.categories);
+    saveTransactions(next.transactions);
+
+    if (!hasRemote) {
+      await Promise.all([
+        dataApi.save('wallets', next.wallets),
+        dataApi.save('categories', next.categories),
+        dataApi.save('transactions', next.transactions),
+      ]);
+    }
+    lastPushed.current = {
+      ...lastPushed.current,
+      wallets: JSON.stringify(next.wallets),
+      categories: JSON.stringify(next.categories),
+      transactions: JSON.stringify(next.transactions),
+    };
+
+    const prefs = remote.preferences?.value as Partial<AiSettings> | undefined;
+    if (prefs) {
+      setAiSettingsState((cur) => {
+        const merged = { ...cur, ...pickPreferences(prefs) };
+        saveStoredAiSettings(merged);
+        return merged;
+      });
+      lastPushed.current.preferences = JSON.stringify(pickPreferences(prefs));
+    }
+    syncedRef.current = true;
+    setSyncStatus('saved');
+  };
+
   // Initialize storage
   useEffect(() => {
     const data = initializeStorageIfNeeded();
     setWallets(data.wallets);
     setCategories(data.categories);
     setTransactions(data.transactions);
-    setIsReady(true);
 
+    if (!syncEnabled) {
+      setIsReady(true);
+    } else {
+      pullFromServer()
+        .catch(() => setSyncStatus('error'))
+        .finally(() => setIsReady(true));
+    }
     // Rates are always automatic: refresh on start, and again when the app comes back after a while
     const refreshIfStale = () => {
       if (!isRatesStale(getStoredExchangeRates())) return;
@@ -104,6 +182,49 @@ export const WalletProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     return () => document.removeEventListener('visibilitychange', onVisible);
   }, []);
 
+
+  // Push local changes to the database, batched: one save per changed document, shortly after the last edit
+  useEffect(() => {
+    if (!syncEnabled || !syncedRef.current) return;
+    const docs: Record<SyncKey, unknown> = {
+      wallets,
+      categories,
+      transactions,
+      preferences: pickPreferences(aiSettings),
+    };
+    const changed = (Object.keys(docs) as SyncKey[]).filter((k) => JSON.stringify(docs[k]) !== lastPushed.current[k]);
+    if (changed.length === 0) return;
+
+    setSyncStatus('saving');
+    const timer = setTimeout(() => {
+      Promise.all(
+        changed.map(async (k) => {
+          const text = JSON.stringify(docs[k]);
+          await dataApi.save(k, docs[k]);
+          lastPushed.current[k] = text;
+        })
+      )
+        .then(() => setSyncStatus('saved'))
+        .catch(() => setSyncStatus('error'));
+    }, 800);
+    return () => clearTimeout(timer);
+  }, [wallets, categories, transactions, aiSettings, syncEnabled]);
+
+  /** Pull-to-refresh: fresh data from the database and fresh exchange rates */
+  const refreshAll = async () => {
+    const rates = fetchLiveExchangeRates().then((r) => {
+      if (r) setExchangeRatesState(r);
+    });
+    if (syncEnabled) {
+      setSyncStatus('loading');
+      try {
+        await pullFromServer();
+      } catch {
+        setSyncStatus('error');
+      }
+    }
+    await rates;
+  };
 
   const openAssistant = () => setIsAssistantOpen(true);
   const closeAssistant = () => setIsAssistantOpen(false);
@@ -307,6 +428,8 @@ export const WalletProvider: React.FC<{ children: React.ReactNode }> = ({ childr
         refreshExchangeRates,
         updateAiSettings,
         resetAllData,
+        syncStatus,
+        refreshAll,
       }}
     >
       {children}

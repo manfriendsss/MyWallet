@@ -13,7 +13,8 @@ export const DEFAULT_AI_SETTINGS: AiSettings = {
   deepseekApiKey: '',
   deepseekModel: 'deepseek-flash',
   rememberKeys: false,
-  keySource: 'browser',
+  // Signed-in users call AI through their own server, which holds the keys
+  keySource: 'server',
 };
 
 /** Any ISO 4217 code the rate table knows */
@@ -45,7 +46,7 @@ const CURRENCY_WORDS: Array<[CurrencyCode, string[]]> = [
 
 const STORAGE_KEY_AI_SETTINGS = 'mywallet_ai_settings';
 const SESSION_KEY_AI_KEYS = 'mywallet_ai_keys_session';
-const REQUEST_TIMEOUT_MS = 30_000;
+const REQUEST_TIMEOUT_MS = 25_000;
 const MAX_AMOUNT = 1e13;
 
 function readJson(storage: Storage, key: string): Record<string, unknown> | null {
@@ -82,7 +83,7 @@ export function getStoredAiSettings(): AiSettings {
     geminiModel: pickModel(stored.geminiModel, GEMINI_MODELS, DEFAULT_AI_SETTINGS.geminiModel),
     deepseekModel: pickModel(stored.deepseekModel, DEEPSEEK_MODELS, DEFAULT_AI_SETTINGS.deepseekModel),
     rememberKeys,
-    keySource: stored.keySource === 'server' ? 'server' : 'browser',
+    keySource: stored.keySource === 'browser' ? 'browser' : 'server',
     geminiApiKey: rememberKeys ? storedGemini : asString(session.geminiApiKey),
     deepseekApiKey: rememberKeys ? storedDeepseek : asString(session.deepseekApiKey),
   };
@@ -266,6 +267,26 @@ export function aiKeyFor(settings: AiSettings, provider: 'gemini' | 'deepseek'):
   return provider === 'gemini' ? settings.geminiApiKey : settings.deepseekApiKey;
 }
 
+/** An error from the provider (or our server) that keeps the HTTP status, so callers can retry the transient ones */
+export class AiHttpError extends Error {
+  status: number;
+  constructor(message: string, status: number) {
+    super(message);
+    this.status = status;
+  }
+}
+
+/** Overloaded or rate limited: worth a short wait and another try */
+export function isTransientAiError(err: unknown): boolean {
+  return err instanceof AiHttpError && (err.status === 503 || err.status === 529 || err.status === 429 || err.status === 504);
+}
+
+const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+
+/** Gemini models that recently failed as overloaded, and when they may be tried again */
+const geminiCooldown = new Map<string, number>();
+const MODEL_COOLDOWN_MS = 10 * 60 * 1000;
+
 async function postJson(url: string, headers: Record<string, string>, body: unknown, label: string) {
   const viaServer = url.startsWith('/');
   let res: Response;
@@ -282,7 +303,7 @@ async function postJson(url: string, headers: Record<string, string>, body: unkn
     });
   } catch (err) {
     if (err instanceof DOMException && (err.name === 'TimeoutError' || err.name === 'AbortError')) {
-      throw new Error(`${label} không phản hồi sau ${REQUEST_TIMEOUT_MS / 1000} giây. Thử lại sau.`);
+      throw new AiHttpError(`${label} không phản hồi sau ${REQUEST_TIMEOUT_MS / 1000} giây. Thử lại sau.`, 504);
     }
     throw new Error(`Không kết nối được tới ${label}. Kiểm tra mạng.`);
   }
@@ -297,10 +318,11 @@ async function postJson(url: string, headers: Record<string, string>, body: unkn
   if (!res.ok) {
     const errorJson = await res.json().catch(() => ({}));
     const detail = asString(errorJson?.error?.message).slice(0, 200);
-    if (viaServer && detail) throw new Error(detail);
-    if (res.status === 401 || res.status === 403) throw new Error(`${label} từ chối API key. Kiểm tra lại key trong Cài đặt.`);
-    if (res.status === 429) throw new Error(`${label} đang giới hạn lượt gọi. Đợi một lát rồi thử lại.`);
-    throw new Error(detail || `Lỗi ${label} (${res.status})`);
+    if (res.status === 503 || res.status === 529) throw new AiHttpError(`${label} đang quá tải. Thử lại sau ít phút.`, res.status);
+    if (res.status === 429) throw new AiHttpError(`${label} đang giới hạn lượt gọi. Đợi một lát rồi thử lại.`, res.status);
+    if (viaServer && detail) throw new AiHttpError(detail, res.status);
+    if (res.status === 401 || res.status === 403) throw new AiHttpError(`${label} từ chối API key. Kiểm tra lại key trong Cài đặt.`, res.status);
+    throw new AiHttpError(detail || `Lỗi ${label} (${res.status})`, res.status);
   }
 
   return res.json();
@@ -320,7 +342,6 @@ export async function callGeminiApi(
   const systemInstruction = buildSystemPrompt(categories, wallets);
   const safeModel = pickModel(model, GEMINI_MODELS, DEFAULT_AI_SETTINGS.geminiModel);
   // The key travels in a header, never in the URL where proxies and logs keep it
-  const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(safeModel)}:generateContent`;
 
   const parts: Array<Record<string, unknown>> = [];
   if (imageBase64) {
@@ -348,15 +369,54 @@ export async function callGeminiApi(
     },
     generationConfig: {
       temperature: 0.1,
-      maxOutputTokens: 500,
+      // Gemini 3 counts thinking tokens against this cap: keep thinking low and leave room for the JSON
+      maxOutputTokens: 2048,
+      thinkingConfig: { thinkingLevel: 'low' },
     },
   };
 
-  const data =
+  const send = (m: string) =>
     apiKey === SERVER_KEY
-      ? await postJson('/api/ai/gemini', {}, { ...payload, model: safeModel }, 'Gemini')
-      : await postJson(endpoint, { 'x-goog-api-key': apiKey }, payload, 'Gemini');
-  const rawText = asString(data?.candidates?.[0]?.content?.parts?.[0]?.text);
+      ? postJson('/api/ai/gemini', {}, { ...payload, model: m }, 'Gemini')
+      : postJson(
+          `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(m)}:generateContent`,
+          { 'x-goog-api-key': apiKey },
+          payload,
+          'Gemini'
+        );
+
+  // Overloaded (503/429): one quick retry. Hanging (504/timeout): move on at once.
+  // A model that just failed is skipped for a while, so later messages don't wait on it again.
+  const preferred = [safeModel, ...GEMINI_MODELS.filter((m) => m !== safeModel)];
+  const healthy = preferred.filter((m) => (geminiCooldown.get(m) ?? 0) < Date.now());
+  const chain = healthy.length ? healthy : preferred;
+  let data: any;
+  let lastError: unknown;
+  attempts: for (const m of chain) {
+    for (let attempt = 0; attempt < 2; attempt++) {
+      try {
+        data = await send(m);
+        geminiCooldown.delete(m);
+        break attempts;
+      } catch (err) {
+        lastError = err;
+        if (!isTransientAiError(err)) throw err;
+        const hanging = err instanceof AiHttpError && err.status === 504;
+        if (hanging || attempt === 1) {
+          geminiCooldown.set(m, Date.now() + MODEL_COOLDOWN_MS);
+          break;
+        }
+        await sleep(800);
+      }
+    }
+  }
+  if (!data) throw lastError;
+
+  const replyParts: Array<{ text?: string; thought?: boolean }> = data?.candidates?.[0]?.content?.parts ?? [];
+  const rawText = replyParts
+    .filter((p) => !p.thought)
+    .map((p) => asString(p.text))
+    .join('');
 
   return parseAiResponseString(rawText);
 }
@@ -381,13 +441,24 @@ export async function callDeepSeekApi(
       { role: 'user', content: prompt },
     ],
     temperature: 0.1,
-    max_tokens: 400,
+    max_tokens: 800,
+    // V4.1 Flash thinks by default and can spend the whole budget before answering
+    thinking: { type: 'disabled' },
   };
 
-  const data =
+  const send = () =>
     apiKey === SERVER_KEY
-      ? await postJson('/api/ai/deepseek', {}, payload, 'DeepSeek')
-      : await postJson(endpoint, { Authorization: `Bearer ${apiKey}` }, payload, 'DeepSeek');
+      ? postJson('/api/ai/deepseek', {}, payload, 'DeepSeek')
+      : postJson(endpoint, { Authorization: `Bearer ${apiKey}` }, payload, 'DeepSeek');
+
+  let data: any;
+  try {
+    data = await send();
+  } catch (err) {
+    if (!isTransientAiError(err)) throw err;
+    await sleep(1200);
+    data = await send();
+  }
   const rawText = asString(data?.choices?.[0]?.message?.content);
 
   return parseAiResponseString(rawText);

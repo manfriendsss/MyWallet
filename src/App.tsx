@@ -2,6 +2,8 @@ import React, { Suspense, lazy, useEffect } from 'react';
 import { MotionConfig } from 'framer-motion';
 import { ThemeProvider } from './context/ThemeContext';
 import { WalletProvider, useWallet } from './context/WalletContext';
+import { AuthProvider, useAuth } from './context/AuthContext';
+import { LoginScreen, FirstPasswordScreen, OfflineNotice } from './components/auth/AuthScreens';
 import { AppLayout } from './components/layout/AppLayout';
 import {
   AnalyticsSkeleton,
@@ -78,13 +80,38 @@ const AppContent: React.FC = () => {
   );
 };
 
+/** Who sees what: the login form, the first-password form, or the app (synced, or offline on cached data) */
+const AuthGate: React.FC = () => {
+  const { status, user, retry } = useAuth();
+
+  if (status === 'loading') {
+    return (
+      <div className="flex min-h-dvh items-center justify-center bg-paper" role="status" aria-label="Đang tải">
+        <img src="/logo.webp" alt="" width={64} height={64} className="h-16 w-16 object-contain motion-safe:animate-pulse" />
+      </div>
+    );
+  }
+  if (status === 'signedOut') return <LoginScreen />;
+  if (status === 'mustChangePassword') return <FirstPasswordScreen />;
+
+  // Remount the wallet when the signed-in user changes, so nothing carries over between sessions
+  return (
+    <>
+      {status === 'offline' && <OfflineNotice onRetry={retry} />}
+      <WalletProvider key={user?.username ?? 'offline'} syncEnabled={status === 'signedIn'}>
+        <AppContent />
+      </WalletProvider>
+    </>
+  );
+};
+
 export function App() {
   return (
     <MotionConfig reducedMotion="user">
       <ThemeProvider>
-        <WalletProvider>
-          <AppContent />
-        </WalletProvider>
+        <AuthProvider>
+          <AuthGate />
+        </AuthProvider>
       </ThemeProvider>
     </MotionConfig>
   );

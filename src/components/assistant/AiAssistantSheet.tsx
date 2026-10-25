@@ -6,7 +6,7 @@ import confetti from 'canvas-confetti';
 import { useWallet } from '../../context/WalletContext';
 import { compressImageToWebP, ACCEPTED_IMAGE_TYPES } from '../../utils/imageCompressor';
 import { startSpeechRecognition, isSpeechRecognitionSupported } from '../../services/speech';
-import { callGeminiApi, callDeepSeekApi, parseTransactionLocally, aiKeyFor } from '../../services/ai';
+import { callGeminiApi, callDeepSeekApi, parseTransactionLocally, aiKeyFor, isTransientAiError } from '../../services/ai';
 import type { ParsedTransactionFromAi } from '../../types';
 import { formatCurrency } from '../../utils/formatters';
 import { toLocalISODate } from '../../utils/date';
@@ -205,7 +205,14 @@ HÃY CẬP NHẬT LẠI VÀ CHỈ BÁO KẾT QUẢ NGẮN GỌN TRONG 1 CÂU THE
       if (parsedData) setCurrentPreview(parsedData);
       pushAi(responseMessage, { previewData: parsedData });
     } catch (err) {
-      pushAi(err instanceof Error ? err.message : 'Có lỗi khi xử lý. Thử lại.', { isError: true });
+      // AI overloaded: don't leave the user empty-handed, read the sentence on the device instead
+      const local = isTransientAiError(err) && !currentPreview ? parseTransactionLocally(raw, categories, wallets) : null;
+      if (local && local.data.amount > 0) {
+        setCurrentPreview(local.data);
+        pushAi(`AI đang quá tải, đã đọc bằng bộ đọc trên máy. ${local.message}`, { previewData: local.data });
+      } else {
+        pushAi(err instanceof Error ? err.message : 'Có lỗi khi xử lý. Thử lại.', { isError: true });
+      }
     } finally {
       setIsProcessing(false);
     }
@@ -371,7 +378,11 @@ HÃY CẬP NHẬT LẠI VÀ CHỈ BÁO KẾT QUẢ NGẮN GỌN TRONG 1 CÂU THE
                 </dl>
 
                 {!canSave && (
-                  <p className="mt-2 text-sm font-semibold text-expense">Chưa có số tiền hợp lệ. Gõ lại kèm số tiền.</p>
+                  <p className="mt-2 text-sm font-semibold text-expense">
+                    {wallets.length === 0
+                      ? 'Chưa có nguồn tiền nào. Thêm ví ở Trang chủ trước rồi lưu giao dịch.'
+                      : 'Chưa có số tiền hợp lệ. Gõ lại kèm số tiền.'}
+                  </p>
                 )}
 
                 <div className="mt-4 flex gap-2">

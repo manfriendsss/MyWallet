@@ -1,6 +1,4 @@
 import type { Category, Transaction, Wallet } from '../types';
-import { convertToVnd, getStoredExchangeRates } from './currency';
-import { toLocalISODate } from '../utils/date';
 
 /** Storage is user-editable: only accept an array of objects, otherwise fall back */
 function readArray<T>(key: string, fallback: T[]): T[] {
@@ -20,48 +18,11 @@ const KEYS = {
   WALLETS: 'mywallet_data_wallets',
   CATEGORIES: 'mywallet_data_categories',
   TRANSACTIONS: 'mywallet_data_transactions',
-  HAS_SEEDED: 'mywallet_has_seeded_v1',
+  HAS_SEEDED: 'mywallet_has_seeded_v2',
 };
 
-export const INITIAL_WALLETS: Wallet[] = [
-  {
-    id: 'w-cash',
-    name: 'Ví tiền mặt',
-    currency: 'VND',
-    initialBalance: 2500000,
-    currentBalance: 2500000,
-    color: '#10b981',
-    icon: 'Wallet',
-    isDefault: true,
-  },
-  {
-    id: 'w-bank',
-    name: 'MB Bank',
-    currency: 'VND',
-    initialBalance: 28650000,
-    currentBalance: 28650000,
-    color: '#3b82f6',
-    icon: 'Landmark',
-  },
-  {
-    id: 'w-paypal',
-    name: 'PayPal USD',
-    currency: 'USD',
-    initialBalance: 450,
-    currentBalance: 450,
-    color: '#0284c7',
-    icon: 'CreditCard',
-  },
-  {
-    id: 'w-poland',
-    name: 'Santander Ba Lan',
-    currency: 'PLN',
-    initialBalance: 860,
-    currentBalance: 860,
-    color: '#dc2626',
-    icon: 'Globe',
-  },
-];
+/** A new account starts with no wallets and no transactions: only the default categories */
+export const INITIAL_WALLETS: Wallet[] = [];
 
 export const INITIAL_CATEGORIES: Category[] = [
   // Expense (Chi tiêu)
@@ -81,98 +42,15 @@ export const INITIAL_CATEGORIES: Category[] = [
   { id: 'c-gift', name: 'Quà tặng & Khác', type: 'income', icon: 'Gift', color: '#ec4899' },
 ];
 
-function generateSeedTransactions(): Transaction[] {
-  const rates = getStoredExchangeRates();
-  const now = new Date();
-  const formatDate = (offsetDays: number) => {
-    const d = new Date(now);
-    d.setDate(d.getDate() - offsetDays);
-    return toLocalISODate(d);
-  };
-
-  const seed: Array<Omit<Transaction, 'amountVnd' | 'exchangeRate'>> = [
-    {
-      id: 'tx-1',
-      type: 'income',
-      amount: 32000000,
-      currency: 'VND',
-      walletId: 'w-bank',
-      categoryId: 'c-salary',
-      date: formatDate(1),
-      time: '09:30',
-      note: 'Lương tháng nhận qua tài khoản MB',
-      createdAt: new Date().toISOString(),
-    },
-    {
-      id: 'tx-2',
-      type: 'expense',
-      amount: 75000,
-      currency: 'VND',
-      walletId: 'w-cash',
-      categoryId: 'c-food',
-      date: formatDate(0),
-      time: '08:15',
-      note: 'Cà phê sáng & Bánh mì',
-      createdAt: new Date().toISOString(),
-    },
-    {
-      id: 'tx-3',
-      type: 'income',
-      amount: 180,
-      currency: 'USD',
-      walletId: 'w-paypal',
-      categoryId: 'c-bonus',
-      date: formatDate(2),
-      time: '15:20',
-      note: 'Tiền freelance quốc tế gửi về PayPal',
-      createdAt: new Date().toISOString(),
-    },
-    {
-      id: 'tx-4',
-      type: 'expense',
-      amount: 125,
-      currency: 'PLN',
-      walletId: 'w-poland',
-      categoryId: 'c-shopping',
-      date: formatDate(3),
-      time: '19:40',
-      note: 'Mua sắm siêu thị Biedronka Warsaw',
-      createdAt: new Date().toISOString(),
-    },
-    {
-      id: 'tx-5',
-      type: 'expense',
-      amount: 250000,
-      currency: 'VND',
-      walletId: 'w-cash',
-      categoryId: 'c-food',
-      date: formatDate(4),
-      time: '12:00',
-      note: 'Ăn trưa liên hoan nhóm',
-      createdAt: new Date().toISOString(),
-    },
-    {
-      id: 'tx-6',
-      type: 'expense',
-      amount: 45,
-      currency: 'USD',
-      walletId: 'w-paypal',
-      categoryId: 'c-work',
-      date: formatDate(5),
-      time: '10:00',
-      note: 'Gói GitHub Copilot & Cloudflare Tools',
-      createdAt: new Date().toISOString(),
-    },
-  ];
-
-  return seed.map((tx) => {
-    const { amountVnd, rateUsed } = convertToVnd(tx.amount, tx.currency, rates);
-    return {
-      ...tx,
-      amountVnd,
-      exchangeRate: rateUsed,
-    };
-  });
+/** Remove the wallet data cached in this browser (on logout) */
+export function clearLocalWalletData(): void {
+  try {
+    for (const key of Object.values(KEYS)) localStorage.removeItem(key);
+    localStorage.removeItem('mywallet_ai_settings');
+    sessionStorage.clear();
+  } catch {
+    // storage unavailable: nothing to clear
+  }
 }
 
 export function loadWallets(): Wallet[] {
@@ -198,7 +76,7 @@ export function initializeStorageIfNeeded(): {
   if (!hasSeeded) {
     const wallets = INITIAL_WALLETS;
     const categories = INITIAL_CATEGORIES;
-    const transactions = generateSeedTransactions();
+    const transactions: Transaction[] = [];
 
     saveWallets(wallets);
     saveCategories(categories);
