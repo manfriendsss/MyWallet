@@ -1,0 +1,19 @@
+name = "mywallet"
+main = "worker.ts"
+compatibility_date = "2024-11-01"
+compatibility_flags = ["nodejs_compat"]
+
+# Cloudflare D1 Database binding
+[[d1_databases]]
+binding = "DB"
+database_name = "mywallet-db"
+database_id = "your-d1-database-id"
+
+# Cloudflare R2 Bucket binding for receipt photos
+[[r2_buckets]]
+binding = "RECEIPTS_BUCKET"
+bucket_name = "mywallet-receipts"
+
+# Deploy static frontend
+[site]
+bucket = "../dist"
