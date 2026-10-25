@@ -56,7 +56,12 @@ export const TotalBalanceCard: React.FC = () => {
         </h2>
 
         {/* The signature: one figure, set big */}
-        <p className="figure mt-2 whitespace-nowrap text-[length:var(--text-figure)] font-bold leading-none tracking-[-0.02em] text-ink">
+        <p
+          className={cn(
+            'figure mt-2 whitespace-nowrap text-[length:var(--text-figure)] font-bold leading-none tracking-[-0.02em]',
+            totalBalanceVnd < 0 ? 'text-expense' : 'text-income'
+          )}
+        >
           {formatCurrency(totalBalanceVnd, 'VND')}
         </p>
         {totalDebtVnd > 0 && (

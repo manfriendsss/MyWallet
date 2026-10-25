@@ -100,7 +100,7 @@ export const BottomNav: React.FC = () => {
         type="button"
         onClick={openAssistant}
         style={{ top: CENTER_Y - BUTTON_R }}
-        className="absolute left-1/2 grid h-14 w-14 -translate-x-1/2 place-items-center rounded-full bg-[image:var(--gradient-accent)] text-accent-ink shadow-[0_8px_18px_-8px_var(--color-glow-1),0_3px_8px_-3px_oklch(40%_0.12_45/0.45)] transition-transform active:scale-95"
+        className="absolute left-1/2 grid h-14 w-14 -translate-x-1/2 place-items-center rounded-full bg-[image:var(--gradient-accent)] text-accent-ink shadow-[0_6px_12px_-4px_oklch(30%_0.08_45/0.35)] transition-transform active:scale-95"
         aria-label="Thêm giao dịch"
       >
         <Plus className="w-7 h-7" strokeWidth={2.5} aria-hidden="true" />

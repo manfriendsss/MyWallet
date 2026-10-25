@@ -57,12 +57,12 @@ export function ToneTabs<T extends string>({
       ref={wrapRef}
       role="tablist"
       aria-label={label}
-      className={cn('relative flex w-full gap-0.5 rounded-control bg-paper-3 p-0.5', className)}
+      className={cn('relative flex w-full gap-1 rounded-card bg-paper-3 p-1', className)}
     >
       {box.w > 0 && (
         <motion.span
           aria-hidden="true"
-          className="absolute top-0.5 bottom-0.5 left-0 rounded-chip"
+          className="absolute top-1 bottom-1 left-0 rounded-[12px]"
           initial={false}
           animate={{
             x: box.x,
@@ -91,7 +91,7 @@ export function ToneTabs<T extends string>({
             aria-selected={selected}
             onClick={() => onChange(tab.id)}
             className={cn(
-              'relative z-[1] min-h-10 flex-1 rounded-chip px-3 text-sm font-semibold transition-colors duration-200',
+              'relative z-[1] min-h-10 flex-1 rounded-[12px] px-3 text-sm font-semibold transition-colors duration-200',
               selected ? 'text-accent-ink' : 'text-muted hover:text-ink'
             )}
           >

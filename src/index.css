@@ -118,15 +118,16 @@
   /* Segmented control: tabs and filters */
   .seg {
     display: inline-flex;
-    gap: var(--space-3xs);
-    padding: var(--space-3xs);
-    border-radius: var(--radius-control);
+    gap: var(--space-2xs);
+    padding: var(--space-2xs);
+    border-radius: var(--radius-card);
     background: var(--color-paper-3);
   }
   .seg > button {
-    min-height: 32px;
+    min-height: 34px;
     padding: 0 var(--space-sm);
-    border-radius: var(--radius-chip);
+    /* concentric with the track: outer radius minus padding */
+    border-radius: 12px;
     font-size: var(--text-sm);
     font-weight: 600;
     color: var(--color-muted);
@@ -173,8 +174,12 @@
   stroke: var(--color-rule);
   stroke-width: 1;
 }
+/* A soft shadow cast upward, so the bar lifts off the page */
 .bottom-bar-shape {
-  filter: drop-shadow(0 -6px 14px oklch(30% 0.03 50 / 0.1));
+  filter: drop-shadow(0 -2px 4px oklch(30% 0.03 50 / 0.06)) drop-shadow(0 -8px 20px oklch(30% 0.03 50 / 0.12));
+}
+.dark .bottom-bar-shape {
+  filter: drop-shadow(0 -2px 4px oklch(5% 0.01 60 / 0.35)) drop-shadow(0 -8px 20px oklch(5% 0.01 60 / 0.45));
 }
 
 @utility no-scrollbar {
