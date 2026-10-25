@@ -11,6 +11,7 @@ import {
   getStoredExchangeRates,
   saveStoredExchangeRates,
   convertToVnd,
+  convertForWallet,
   fetchLiveExchangeRates,
   isRatesStale,
   DEFAULT_EXCHANGE_RATES,
@@ -245,11 +246,19 @@ export const WalletProvider: React.FC<{ children: React.ReactNode; syncEnabled?:
     if (newCats) saveCategories(recalculated.categories);
   };
 
+  /** VND value of an amount recorded in a wallet: PayPal wallets get PayPal's rate for their own currency */
+  const toVndFor = (amount: number, currency: string, walletId: string) => {
+    const wallet = wallets.find((w) => w.id === walletId);
+    return wallet && wallet.currency === currency
+      ? convertForWallet(amount, wallet, exchangeRates)
+      : convertToVnd(amount, currency, exchangeRates);
+  };
+
   // Transactions Actions
   const addTransaction = (
     txData: Omit<Transaction, 'id' | 'amountVnd' | 'exchangeRate' | 'createdAt'>
   ): Transaction => {
-    const { amountVnd, rateUsed } = convertToVnd(txData.amount, txData.currency, exchangeRates);
+    const { amountVnd, rateUsed } = toVndFor(txData.amount, txData.currency, txData.walletId);
     const newTx: Transaction = {
       ...txData,
       id: newId('tx'),
@@ -273,7 +282,7 @@ export const WalletProvider: React.FC<{ children: React.ReactNode; syncEnabled?:
     if (updates.amount !== undefined || updates.currency !== undefined) {
       const curr = updates.currency || target.currency;
       const amt = updates.amount !== undefined ? updates.amount : target.amount;
-      const converted = convertToVnd(amt, curr, exchangeRates);
+      const converted = toVndFor(amt, curr, updates.walletId ?? target.walletId);
       amountVnd = converted.amountVnd;
       exchangeRate = converted.rateUsed;
     }
@@ -293,9 +302,9 @@ export const WalletProvider: React.FC<{ children: React.ReactNode; syncEnabled?:
     const from = wallets.find((w) => w.id === fromWalletId);
     const to = wallets.find((w) => w.id === toWalletId);
     if (!from || !to || !(amount > 0) || from.id === to.id) return;
-    const { amountVnd, rateUsed } = convertToVnd(amount, from.currency, exchangeRates);
+    const { amountVnd, rateUsed } = convertForWallet(amount, from, exchangeRates);
     // Arriving amount in the destination currency, through VND
-    const toRate = convertToVnd(1, to.currency, exchangeRates).rateUsed || 1;
+    const toRate = convertForWallet(1, to, exchangeRates).rateUsed || 1;
     const toAmount = to.currency === from.currency ? amount : Math.round((amountVnd / toRate) * 100) / 100;
     const now = new Date();
     const transfer: Transaction = {
@@ -404,7 +413,7 @@ export const WalletProvider: React.FC<{ children: React.ReactNode; syncEnabled?:
   // Calculated totals in VND. The balance is net worth: card debt (negative balances) is subtracted.
   const totalBalanceVnd = useMemo(() => {
     return wallets.reduce((sum, w) => {
-      const { amountVnd } = convertToVnd(w.currentBalance, w.currency, exchangeRates);
+      const { amountVnd } = convertForWallet(w.currentBalance, w, exchangeRates);
       return sum + amountVnd;
     }, 0);
   }, [wallets, exchangeRates]);
@@ -413,7 +422,7 @@ export const WalletProvider: React.FC<{ children: React.ReactNode; syncEnabled?:
   const totalDebtVnd = useMemo(() => {
     return wallets.reduce((sum, w) => {
       if (w.kind !== 'credit' || w.currentBalance >= 0) return sum;
-      return sum + convertToVnd(-w.currentBalance, w.currency, exchangeRates).amountVnd;
+      return sum + convertForWallet(-w.currentBalance, w, exchangeRates).amountVnd;
     }, 0);
   }, [wallets, exchangeRates]);
 

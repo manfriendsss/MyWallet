@@ -22,7 +22,7 @@ import { TileGrid, GridTile, AddTile } from '../ui/GridTile';
 import { PaypalIcon, PAYPAL_BLUE } from '../ui/BrandIcon';
 import type { CurrencyCode, Wallet } from '../../types';
 import { formatCurrency } from '../../utils/formatters';
-import { convertToVnd, getCurrencyOptions } from '../../services/currency';
+import { convertForWallet, getCurrencyOptions } from '../../services/currency';
 import { Select } from '../ui/Select';
 import { CARD_ART } from '../../assets/cards';
 import { cn } from '../../utils/cn';
@@ -197,7 +197,7 @@ export const WalletsCard: React.FC = () => {
 
       <TileGrid label="Nguồn tiền">
         {wallets.map((wallet) => {
-          const { amountVnd } = convertToVnd(wallet.currentBalance, wallet.currency, exchangeRates);
+          const { amountVnd } = convertForWallet(wallet.currentBalance, wallet, exchangeRates);
           const Icon = WALLET_ICONS[wallet.icon] ?? WalletIcon;
           const isCard = wallet.kind === 'credit';
           const owed = isCard ? Math.max(0, -wallet.currentBalance) : 0;

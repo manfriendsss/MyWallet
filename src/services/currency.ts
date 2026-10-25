@@ -1,4 +1,4 @@
-import type { CurrencyCode, ExchangeRates } from '../types';
+import type { CurrencyCode, ExchangeRates, Wallet } from '../types';
 
 /**
  * Offline fallback only: approximate VND per unit, replaced by the live table on the first successful fetch.
@@ -105,6 +105,25 @@ export function convertToVnd(
     return { amountVnd: amount, rateUsed: 1 };
   }
   const rate = getRate(currency, rates) ?? 0;
+  return { amountVnd: Math.round(amount * rate), rateUsed: rate };
+}
+
+/** PayPal converts at about 97% of the market rate (its spread), not the bank rate */
+export const PAYPAL_RATE_FACTOR = 0.97;
+
+export function isPaypalWallet(wallet: Pick<Wallet, 'icon' | 'name'>): boolean {
+  return wallet.icon === 'PayPal' || /paypal/i.test(wallet.name);
+}
+
+/** The rate a given wallet actually gets: the market rate, or 97% of it for a PayPal balance */
+export function convertForWallet(
+  amount: number,
+  wallet: Pick<Wallet, 'icon' | 'name' | 'currency'>,
+  rates: ExchangeRates = getStoredExchangeRates()
+): { amountVnd: number; rateUsed: number } {
+  if (wallet.currency === 'VND' || !isPaypalWallet(wallet)) return convertToVnd(amount, wallet.currency, rates);
+  const market = getRate(wallet.currency, rates) ?? 0;
+  const rate = Math.round(market * PAYPAL_RATE_FACTOR * 10_000) / 10_000;
   return { amountVnd: Math.round(amount * rate), rateUsed: rate };
 }
 
