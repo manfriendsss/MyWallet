@@ -125,21 +125,22 @@ export function recalculateWalletBalances(
   transactions: Transaction[],
   categories?: Category[]
 ): { wallets: Wallet[]; categories: Category[]; transactions: Transaction[] } {
-  const updatedWallets = wallets.map((w) => {
-    let balance = Number(w.initialBalance) || 0;
-    const walletTxs = transactions.filter((tx) => tx.walletId === w.id);
-    for (const tx of walletTxs) {
-      if (tx.type === 'income') {
-        balance += Number(tx.amount) || 0;
-      } else {
-        balance -= Number(tx.amount) || 0;
-      }
+  // Opening balance, then every entry: income adds, expense subtracts,
+  // a transfer leaves one wallet and arrives in another (in that wallet's currency)
+  const balances = new Map(wallets.map((w) => [w.id, Number(w.initialBalance) || 0]));
+  const add = (id: string | undefined, delta: number) => {
+    if (id && balances.has(id)) balances.set(id, (balances.get(id) ?? 0) + delta);
+  };
+  for (const tx of transactions) {
+    const amount = Number(tx.amount) || 0;
+    if (tx.type === 'income') add(tx.walletId, amount);
+    else if (tx.type === 'expense') add(tx.walletId, -amount);
+    else if (tx.type === 'transfer') {
+      add(tx.walletId, -amount);
+      add(tx.toWalletId, Number(tx.toAmount ?? tx.amount) || 0);
     }
-    return {
-      ...w,
-      currentBalance: balance,
-    };
-  });
+  }
+  const updatedWallets = wallets.map((w) => ({ ...w, currentBalance: balances.get(w.id) ?? 0 }));
 
   return {
     wallets: updatedWallets,

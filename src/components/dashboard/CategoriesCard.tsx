@@ -1,13 +1,14 @@
 import React, { useState } from 'react';
-import { Plus, Pencil } from 'lucide-react';
 import { useWallet } from '../../context/WalletContext';
 import { Card, CardHeader } from '../ui/Card';
 import { Modal } from '../ui/Modal';
 import { Button } from '../ui/Button';
 import { IconRenderer } from '../ui/IconRenderer';
-import { Swatches, ColorTile } from '../ui/Swatches';
+import { Swatches } from '../ui/Swatches';
+import { TileGrid, GridTile, AddTile } from '../ui/GridTile';
+import { ToneTabs } from '../ui/ToneTabs';
 import type { Category, TransactionType } from '../../types';
-import { formatCompactCurrency } from '../../utils/formatters';
+import { formatCurrency } from '../../utils/formatters';
 import { CARD_ART } from '../../assets/cards';
 import { cn } from '../../utils/cn';
 
@@ -84,54 +85,39 @@ export const CategoriesCard: React.FC = () => {
         id="categories-heading"
         title="Danh mục"
         art={CARD_ART.categories}
-        action={
-          <div className="seg" role="group" aria-label="Loại danh mục">
-            <button type="button" aria-pressed={activeTab === 'expense'} onClick={() => setActiveTab('expense')}>
-              Chi ({countOf('expense')})
-            </button>
-            <button type="button" aria-pressed={activeTab === 'income'} onClick={() => setActiveTab('income')}>
-              Thu ({countOf('income')})
-            </button>
-          </div>
-        }
       />
 
-      <ul className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-x-6 border-t border-rule">
+      {/* Full-width tabs; the pill flows between them like the transaction filter */}
+      <ToneTabs
+        tabs={[
+          { id: 'expense', label: `Chi tiêu (${countOf('expense')})`, tone: 'expense' },
+          { id: 'income', label: `Thu nhập (${countOf('income')})`, tone: 'income' },
+        ]}
+        value={activeTab}
+        onChange={setActiveTab}
+        label="Loại danh mục"
+        className="mb-4"
+      />
+
+      <TileGrid label={activeTab === 'income' ? 'Danh mục thu nhập' : 'Danh mục chi tiêu'}>
         {tabCategories.map((cat) => {
           const totalThisMonth = categoryTotals[cat.id] || 0;
           return (
-            <li key={cat.id} className="flex items-center gap-3 border-b border-rule py-2">
-              <ColorTile color={cat.color} size="sm">
-                <IconRenderer name={cat.icon} className="w-3.5 h-3.5" />
-              </ColorTile>
-              <span className="min-w-0 flex-1 truncate text-sm font-semibold text-ink">{cat.name}</span>
-              <span className={cn('figure text-sm font-semibold', totalThisMonth ? 'text-ink' : 'text-muted')}>
-                {formatCompactCurrency(totalThisMonth, 'VND')}
-              </span>
-              <button
-                type="button"
-                onClick={() => openEdit(cat)}
-                aria-label={`Sửa danh mục ${cat.name}`}
-                title="Sửa danh mục"
-                className="-mr-2 grid h-10 w-10 shrink-0 place-items-center rounded-control text-muted hover:bg-paper-3 hover:text-ink transition-colors"
-              >
-                <Pencil className="w-4 h-4" aria-hidden="true" />
-              </button>
-            </li>
+            <GridTile
+              key={cat.id}
+              color={cat.color}
+              icon={<IconRenderer name={cat.icon} className="h-[22px] w-[22px]" />}
+              name={cat.name}
+              amount={formatCurrency(totalThisMonth, 'VND')}
+              muted={!totalThisMonth}
+              onClick={() => openEdit(cat)}
+              editLabel="Sửa danh mục"
+            />
           );
         })}
-      </ul>
-
-      {tabCategories.length === 0 && (
-        <p className="py-8 text-center text-sm text-muted">Chưa có danh mục nào trong mục này.</p>
-      )}
-
-      <div className="pt-3">
-        <Button variant="ghost" size="sm" onClick={openAdd} className="-ml-3 text-accent hover:text-accent-hover">
-          <Plus className="w-4 h-4" aria-hidden="true" />
-          <span>Thêm danh mục {activeTab === 'income' ? 'thu' : 'chi'}</span>
-        </Button>
-      </div>
+        <AddTile label={activeTab === 'income' ? 'Thêm mục thu' : 'Thêm mục chi'} onClick={openAdd} />
+      </TileGrid>
+      <p className="mt-3 text-xs text-muted">Số tiền là tổng phát sinh trong tháng này.</p>
 
       {/* Modal: thêm hoặc sửa danh mục */}
       <Modal

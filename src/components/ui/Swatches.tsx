@@ -37,7 +37,7 @@ export const Swatches: React.FC<{
 );
 
 /** Icon tile in a record's own colour (wallet, category) */
-export const ColorTile: React.FC<{ color?: string; size?: 'sm' | 'md'; children: React.ReactNode }> = ({
+export const ColorTile: React.FC<{ color?: string; size?: 'sm' | 'md' | 'lg'; children: React.ReactNode }> = ({
   color,
   size = 'md',
   children,
@@ -46,7 +46,7 @@ export const ColorTile: React.FC<{ color?: string; size?: 'sm' | 'md'; children:
     aria-hidden="true"
     className={cn(
       'grid shrink-0 place-items-center text-on-data',
-      size === 'md' ? 'h-9 w-9 rounded-control' : 'h-7 w-7 rounded-chip'
+      size === 'lg' ? 'h-12 w-12 rounded-card' : size === 'md' ? 'h-9 w-9 rounded-control' : 'h-7 w-7 rounded-chip'
     )}
     style={{ backgroundColor: color || 'var(--color-muted)' }}
   >

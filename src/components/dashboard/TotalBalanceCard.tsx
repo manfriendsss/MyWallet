@@ -5,7 +5,7 @@ import { CARD_ART } from '../../assets/cards';
 import { cn } from '../../utils/cn';
 
 export const TotalBalanceCard: React.FC = () => {
-  const { totalBalanceVnd, totalIncomeThisMonthVnd, totalExpenseThisMonthVnd } = useWallet();
+  const { totalBalanceVnd, totalIncomeThisMonthVnd, totalExpenseThisMonthVnd, totalDebtVnd } = useWallet();
 
   const netSavings = totalIncomeThisMonthVnd - totalExpenseThisMonthVnd;
   const savingsRate =
@@ -59,6 +59,12 @@ export const TotalBalanceCard: React.FC = () => {
         <p className="figure mt-2 whitespace-nowrap text-[length:var(--text-figure)] font-bold leading-none tracking-[-0.02em] text-ink">
           {formatCurrency(totalBalanceVnd, 'VND')}
         </p>
+        {totalDebtVnd > 0 && (
+          <p className="mt-2 text-sm text-muted">
+            Đã trừ nợ thẻ tín dụng{' '}
+            <span className="figure font-bold text-expense">{formatCurrency(totalDebtVnd, 'VND')}</span>
+          </p>
+        )}
 
         {/* This month: in, out, net */}
         <dl className="mt-6 grid grid-cols-2 sm:grid-cols-3 gap-px overflow-hidden rounded-control bg-rule sm:max-w-[calc(100%-10rem)] lg:max-w-[calc(100%-12rem)]">

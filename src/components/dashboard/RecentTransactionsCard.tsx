@@ -60,6 +60,7 @@ export const RecentTransactionsCard: React.FC = () => {
               tx={tx}
               category={categories.find((c) => c.id === tx.categoryId)}
               wallet={wallets.find((w) => w.id === tx.walletId)}
+              toWallet={tx.toWalletId ? wallets.find((w) => w.id === tx.toWalletId) : undefined}
               onDelete={deleteTransaction}
             />
           ))}

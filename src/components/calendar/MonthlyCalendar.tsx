@@ -58,9 +58,10 @@ export const MonthlyCalendar: React.FC = () => {
     if (!transactionsByDate[tx.date]) {
       transactionsByDate[tx.date] = { incomeVnd: 0, expenseVnd: 0, count: 0 };
     }
+    // Transfers (paying a card) are neither income nor spending
     if (tx.type === 'income') {
       transactionsByDate[tx.date].incomeVnd += tx.amountVnd;
-    } else {
+    } else if (tx.type === 'expense') {
       transactionsByDate[tx.date].expenseVnd += tx.amountVnd;
     }
     transactionsByDate[tx.date].count += 1;
@@ -73,7 +74,7 @@ export const MonthlyCalendar: React.FC = () => {
   for (const tx of transactions) {
     if (tx.date.startsWith(monthKey)) {
       if (tx.type === 'income') monthTotalIncome += tx.amountVnd;
-      else monthTotalExpense += tx.amountVnd;
+      else if (tx.type === 'expense') monthTotalExpense += tx.amountVnd;
     }
   }
 
@@ -252,6 +253,7 @@ export const MonthlyCalendar: React.FC = () => {
                   tx={tx}
                   category={categories.find((c) => c.id === tx.categoryId)}
                   wallet={wallets.find((w) => w.id === tx.walletId)}
+                  toWallet={tx.toWalletId ? wallets.find((w) => w.id === tx.toWalletId) : undefined}
                   showDate={false}
                 />
               ))}
@@ -262,7 +264,7 @@ export const MonthlyCalendar: React.FC = () => {
                 <span className="font-bold text-ink">
                   {formatCurrency(
                     selectedDayTransactions.reduce(
-                      (sum, tx) => sum + (tx.type === 'income' ? tx.amountVnd : -tx.amountVnd),
+                      (sum, tx) => sum + (tx.type === 'income' ? tx.amountVnd : tx.type === 'expense' ? -tx.amountVnd : 0),
                       0
                     ),
                     'VND'

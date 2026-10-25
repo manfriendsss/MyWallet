@@ -29,7 +29,7 @@ import {
   recalculateWalletBalances,
   INITIAL_CATEGORIES,
 } from '../services/storage';
-import { newId } from '../utils/date';
+import { newId, toLocalISODate } from '../utils/date';
 import { dataApi, type SyncKey } from '../services/api';
 
 interface WalletContextType {
@@ -52,11 +52,14 @@ interface WalletContextType {
   totalBalanceVnd: number;
   totalIncomeThisMonthVnd: number;
   totalExpenseThisMonthVnd: number;
+  totalDebtVnd: number;
 
   // Actions
   addTransaction: (tx: Omit<Transaction, 'id' | 'amountVnd' | 'exchangeRate' | 'createdAt'>) => Transaction;
   updateTransaction: (id: string, updates: Partial<Transaction>) => void;
   deleteTransaction: (id: string) => void;
+  /** Move money between your own wallets, e.g. paying off a credit card. Never counted as spending. */
+  addTransfer: (fromWalletId: string, toWalletId: string, amount: number, note?: string) => void;
 
   addWallet: (wallet: Omit<Wallet, 'id' | 'currentBalance'>) => Wallet;
   updateWallet: (id: string, updates: Partial<Wallet>) => void;
@@ -286,6 +289,33 @@ export const WalletProvider: React.FC<{ children: React.ReactNode; syncEnabled?:
     syncState(wallets, newTxs);
   };
 
+  const addTransfer = (fromWalletId: string, toWalletId: string, amount: number, note?: string) => {
+    const from = wallets.find((w) => w.id === fromWalletId);
+    const to = wallets.find((w) => w.id === toWalletId);
+    if (!from || !to || !(amount > 0) || from.id === to.id) return;
+    const { amountVnd, rateUsed } = convertToVnd(amount, from.currency, exchangeRates);
+    // Arriving amount in the destination currency, through VND
+    const toRate = convertToVnd(1, to.currency, exchangeRates).rateUsed || 1;
+    const toAmount = to.currency === from.currency ? amount : Math.round((amountVnd / toRate) * 100) / 100;
+    const now = new Date();
+    const transfer: Transaction = {
+      id: newId('tx'),
+      type: 'transfer',
+      amount,
+      currency: from.currency,
+      amountVnd,
+      exchangeRate: rateUsed,
+      walletId: from.id,
+      toWalletId: to.id,
+      toAmount,
+      categoryId: '',
+      date: toLocalISODate(now),
+      time: now.toTimeString().slice(0, 5),
+      note: note ?? (to.kind === 'credit' ? `Trả nợ thẻ ${to.name}` : `Chuyển sang ${to.name}`),
+      createdAt: now.toISOString(),
+    };
+    syncState(wallets, [transfer, ...transactions]);
+  };
   // Wallets Actions
   const addWallet = (walletData: Omit<Wallet, 'id' | 'currentBalance'>): Wallet => {
     const newWallet: Wallet = {
@@ -303,9 +333,13 @@ export const WalletProvider: React.FC<{ children: React.ReactNode; syncEnabled?:
     syncState(newWallets, transactions);
   };
 
+  /** Removes the wallet and the entries recorded in or sent to it, so no totals point at a wallet that is gone */
   const deleteWallet = (id: string) => {
     const newWallets = wallets.filter((w) => w.id !== id);
-    syncState(newWallets, transactions);
+    syncState(
+      newWallets,
+      transactions.filter((t) => t.walletId !== id && t.toWalletId !== id)
+    );
   };
 
   // Categories Actions
@@ -367,11 +401,19 @@ export const WalletProvider: React.FC<{ children: React.ReactNode; syncEnabled?:
     setAiSettingsState(DEFAULT_AI_SETTINGS);
   };
 
-  // Calculated totals in VND
+  // Calculated totals in VND. The balance is net worth: card debt (negative balances) is subtracted.
   const totalBalanceVnd = useMemo(() => {
     return wallets.reduce((sum, w) => {
       const { amountVnd } = convertToVnd(w.currentBalance, w.currency, exchangeRates);
       return sum + amountVnd;
+    }, 0);
+  }, [wallets, exchangeRates]);
+
+  /** What is owed on credit cards, as a positive VND amount */
+  const totalDebtVnd = useMemo(() => {
+    return wallets.reduce((sum, w) => {
+      if (w.kind !== 'credit' || w.currentBalance >= 0) return sum;
+      return sum + convertToVnd(-w.currentBalance, w.currency, exchangeRates).amountVnd;
     }, 0);
   }, [wallets, exchangeRates]);
 
@@ -386,7 +428,7 @@ export const WalletProvider: React.FC<{ children: React.ReactNode; syncEnabled?:
       if (tx.date.startsWith(currentYearMonth)) {
         if (tx.type === 'income') {
           inc += tx.amountVnd;
-        } else {
+        } else if (tx.type === 'expense') {
           exp += tx.amountVnd;
         }
       }
@@ -415,9 +457,11 @@ export const WalletProvider: React.FC<{ children: React.ReactNode; syncEnabled?:
         totalBalanceVnd,
         totalIncomeThisMonthVnd,
         totalExpenseThisMonthVnd,
+        totalDebtVnd,
         addTransaction,
         updateTransaction,
         deleteTransaction,
+        addTransfer,
         addWallet,
         updateWallet,
         deleteWallet,

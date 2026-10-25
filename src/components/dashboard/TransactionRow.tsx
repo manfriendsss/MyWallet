@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { Trash2 } from 'lucide-react';
+import { ArrowLeftRight, Trash2 } from 'lucide-react';
 import type { Category, Transaction, Wallet } from '../../types';
 import { IconRenderer } from '../ui/IconRenderer';
 import { ColorTile } from '../ui/Swatches';
@@ -9,6 +9,8 @@ interface TransactionRowProps {
   tx: Transaction;
   category?: Category;
   wallet?: Wallet;
+  /** Transfers only: where the money went */
+  toWallet?: Wallet;
   showDate?: boolean;
   onDelete?: (id: string) => void;
 }
@@ -18,13 +20,17 @@ export const TransactionRow: React.FC<TransactionRowProps> = ({
   tx,
   category,
   wallet,
+  toWallet,
   showDate = true,
   onDelete,
 }) => {
   const [confirming, setConfirming] = useState(false);
   const isIncome = tx.type === 'income';
+  const isTransfer = tx.type === 'transfer';
   const isForeign = tx.currency !== 'VND';
-  const title = tx.note || category?.name || 'Giao dịch';
+  const title = tx.note || category?.name || (isTransfer ? 'Chuyển tiền' : 'Giao dịch');
+  const sign = isTransfer ? '' : isIncome ? '+' : '−';
+  const tone = isTransfer ? 'text-ink-2' : isIncome ? 'text-income' : 'text-expense';
 
   useEffect(() => {
     if (!confirming) return;
@@ -32,15 +38,21 @@ export const TransactionRow: React.FC<TransactionRowProps> = ({
     return () => clearTimeout(t);
   }, [confirming]);
 
-  const meta = [wallet?.name ?? 'Ví đã xóa', showDate ? formatShortDate(tx.date) : null, tx.time]
-    .filter(Boolean)
-    .join(', ');
+  const from = wallet?.name ?? 'Ví đã xóa';
+  const where = isTransfer ? `${from} → ${toWallet?.name ?? 'Ví đã xóa'}` : from;
+  const meta = [where, showDate ? formatShortDate(tx.date) : null, tx.time].filter(Boolean).join(', ');
 
   return (
     <li className="flex items-center gap-3 py-3">
-      <ColorTile color={category?.color}>
-        <IconRenderer name={category?.icon || 'CircleDot'} className="w-[18px] h-[18px]" />
-      </ColorTile>
+      {isTransfer ? (
+        <ColorTile color={toWallet?.color}>
+          <ArrowLeftRight className="w-[18px] h-[18px]" />
+        </ColorTile>
+      ) : (
+        <ColorTile color={category?.color}>
+          <IconRenderer name={category?.icon || 'CircleDot'} className="w-[18px] h-[18px]" />
+        </ColorTile>
+      )}
 
       <div className="min-w-0 flex-1">
         <p className="flex items-center gap-1.5 text-sm font-semibold text-ink">
@@ -55,9 +67,7 @@ export const TransactionRow: React.FC<TransactionRowProps> = ({
       </div>
 
       <div className="text-right">
-        <p className={`figure text-sm font-bold ${isIncome ? 'text-income' : 'text-expense'}`}>
-          {`${isIncome ? '+' : '−'}${formatCurrency(tx.amount, tx.currency)}`}
-        </p>
+        <p className={`figure text-sm font-bold ${tone}`}>{`${sign}${formatCurrency(tx.amount, tx.currency)}`}</p>
         {isForeign && (
           <p className="figure text-xs text-muted">{`≈ ${formatCurrency(tx.amountVnd, 'VND')}`}</p>
         )}

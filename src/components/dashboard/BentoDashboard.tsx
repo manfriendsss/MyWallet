@@ -10,18 +10,14 @@ export const BentoDashboard: React.FC = () => {
       {/* 1. The balance ledger */}
       <TotalBalanceCard />
 
-      {/* 2. Recent activity leads; sources sit beside it */}
-      <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
-        <div className="lg:col-span-7 lg:order-2 min-w-0">
-          <RecentTransactionsCard />
-        </div>
-        <div className="lg:col-span-5 lg:order-1 min-w-0">
-          <WalletsCard />
-        </div>
-      </div>
+      {/* 2. Where the money sits */}
+      <WalletsCard />
 
-      {/* 3. Categories */}
+      {/* 3. What it goes to and comes from */}
       <CategoriesCard />
+
+      {/* 4. The latest movements */}
+      <RecentTransactionsCard />
     </div>
   );
 };

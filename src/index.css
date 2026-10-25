@@ -24,6 +24,21 @@
     -webkit-tap-highlight-color: transparent;
   }
 
+  /* Touch screens: scroll with one finger, no pinch or double-tap zoom, no scrollbar */
+  @media (pointer: coarse) {
+    html {
+      touch-action: pan-x pan-y;
+      scrollbar-width: none;
+    }
+    html::-webkit-scrollbar,
+    body::-webkit-scrollbar {
+      display: none;
+    }
+    * {
+      touch-action: manipulation;
+    }
+  }
+
   h1, h2, h3 {
     font-weight: 700;
     line-height: 1.2;

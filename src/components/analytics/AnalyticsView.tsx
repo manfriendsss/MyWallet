@@ -16,15 +16,22 @@ import { IconRenderer } from '../ui/IconRenderer';
 import { ColorTile } from '../ui/Swatches';
 import { formatCurrency } from '../../utils/formatters';
 import { CARD_ART } from '../../assets/cards';
+import { ToneTabs, type ToneTab } from '../ui/ToneTabs';
 
 type TimeRange = 'day' | 'week' | 'month' | 'year';
 
 const RANGE_LABELS: Record<TimeRange, string> = {
   day: 'Hôm nay',
-  week: 'Tuần này',
-  month: 'Tháng này',
-  year: 'Năm nay',
+  week: 'Tuần',
+  month: 'Tháng',
+  year: 'Năm',
 };
+
+const RANGE_TABS: Array<ToneTab<TimeRange>> = (Object.keys(RANGE_LABELS) as TimeRange[]).map((id) => ({
+  id,
+  label: RANGE_LABELS[id],
+  tone: 'accent',
+}));
 
 export const AnalyticsView: React.FC = () => {
   const { transactions, categories } = useWallet();
@@ -104,15 +111,7 @@ export const AnalyticsView: React.FC = () => {
   return (
     <div className="space-y-6">
       {/* Range Selector */}
-      <div className="flex">
-        <div className="seg w-full sm:w-auto overflow-x-auto no-scrollbar [&>button]:flex-1" role="group" aria-label="Khoảng thời gian">
-          {(Object.keys(RANGE_LABELS) as TimeRange[]).map((r) => (
-            <button key={r} type="button" aria-pressed={range === r} onClick={() => setRange(r)}>
-              {RANGE_LABELS[r]}
-            </button>
-          ))}
-        </div>
-      </div>
+      <ToneTabs tabs={RANGE_TABS} value={range} onChange={setRange} label="Khoảng thời gian" />
 
       {/* Summary row */}
       <Card as="div" className="p-0 sm:p-0">
