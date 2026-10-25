@@ -11,6 +11,24 @@ interface ThemeContextType {
 
 const ThemeContext = createContext<ThemeContextType | undefined>(undefined);
 
+// The page background of each theme (--color-paper in tokens.css), as hex for the browser chrome
+const STATUS_BAR = { light: '#f7f4f0', dark: '#211c17' };
+
+/**
+ * The phone's status bar (and an installed app's title bar) follows the app's own theme,
+ * not the OS setting, so it always matches what is on screen.
+ */
+function syncStatusBar(isDark: boolean) {
+  let meta = document.querySelector<HTMLMetaElement>('meta[name="theme-color"]');
+  if (!meta) {
+    meta = document.createElement('meta');
+    meta.name = 'theme-color';
+    document.head.appendChild(meta);
+  }
+  meta.content = isDark ? STATUS_BAR.dark : STATUS_BAR.light;
+  document.documentElement.style.colorScheme = isDark ? 'dark' : 'light';
+}
+
 export const ThemeProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [theme, setThemeState] = useState<ThemeMode>(() => {
     const saved = localStorage.getItem('mywallet_theme');
@@ -37,6 +55,7 @@ export const ThemeProvider: React.FC<{ children: React.ReactNode }> = ({ childre
       } else {
         root.classList.remove('dark');
       }
+      syncStatusBar(activeIsDark);
     };
 
     applyTheme();
