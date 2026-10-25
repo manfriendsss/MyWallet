@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from 'react';
+import { motion } from 'framer-motion';
 import { ArrowLeftRight, Trash2 } from 'lucide-react';
 import type { Category, Transaction, Wallet } from '../../types';
 import { IconRenderer } from '../ui/IconRenderer';
@@ -13,6 +14,7 @@ interface TransactionRowProps {
   toWallet?: Wallet;
   showDate?: boolean;
   onDelete?: (id: string) => void;
+  index?: number;
 }
 
 /** One ledger line. Delete asks once, inline, and the question clears itself after a few seconds. */
@@ -23,6 +25,7 @@ export const TransactionRow: React.FC<TransactionRowProps> = ({
   toWallet,
   showDate = true,
   onDelete,
+  index,
 }) => {
   const [confirming, setConfirming] = useState(false);
   const isIncome = tx.type === 'income';
@@ -43,7 +46,12 @@ export const TransactionRow: React.FC<TransactionRowProps> = ({
   const meta = [where, showDate ? formatShortDate(tx.date) : null, tx.time].filter(Boolean).join(', ');
 
   return (
-    <li className="flex items-center gap-3 py-3">
+    <motion.li
+      className="flex items-center gap-3 py-3"
+      initial={{ opacity: 0, y: 8 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ duration: 0.3, delay: Math.min(index ?? 0, 10) * 0.035 }}
+    >
       {isTransfer ? (
         <ColorTile color={toWallet?.color}>
           <ArrowLeftRight className="w-[18px] h-[18px]" />
@@ -94,6 +102,6 @@ export const TransactionRow: React.FC<TransactionRowProps> = ({
             <Trash2 className="w-4 h-4" aria-hidden="true" />
           </button>
         ))}
-    </li>
+    </motion.li>
   );
 };

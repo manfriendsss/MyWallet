@@ -55,6 +55,11 @@ export function formatCurrency(amount: number, currency: CurrencyCode = 'VND'): 
   return prefix ? `${sign}${symbol}${digits}` : `${sign}${digits} ${symbol}`;
 }
 
+/** Income/expense with its sign (+12.000 đ, −5.000 đ); zero carries no sign: 0 đ */
+export function formatSigned(amount: number, currency: CurrencyCode, sign: '+' | '−'): string {
+  return amount === 0 ? formatCurrency(0, currency) : `${sign}${formatCurrency(Math.abs(amount), currency)}`;
+}
+
 /** Kept for existing callers: amounts are always written out in full */
 export function formatCompactCurrency(amount: number, currency: CurrencyCode = 'VND'): string {
   return formatCurrency(amount, currency);

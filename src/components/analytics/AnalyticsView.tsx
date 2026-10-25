@@ -14,9 +14,10 @@ import { useWallet } from '../../context/WalletContext';
 import { Card, CardHeader } from '../ui/Card';
 import { IconRenderer } from '../ui/IconRenderer';
 import { ColorTile } from '../ui/Swatches';
-import { formatCurrency } from '../../utils/formatters';
+import { formatCurrency, formatSigned } from '../../utils/formatters';
 import { CARD_ART } from '../../assets/cards';
 import { ToneTabs, type ToneTab } from '../ui/ToneTabs';
+import { Stagger, StaggerItem } from '../ui/Stagger';
 
 type TimeRange = 'day' | 'week' | 'month' | 'year';
 
@@ -99,21 +100,25 @@ export const AnalyticsView: React.FC = () => {
   }, [filteredTransactions, categories, totalExpense]);
 
   const stats = [
-    { label: 'Tổng thu', value: `+${formatCurrency(totalIncome, 'VND')}`, tone: 'text-income' },
-    { label: 'Tổng chi', value: `−${formatCurrency(totalExpense, 'VND')}`, tone: 'text-expense' },
+    { label: 'Tổng thu', value: formatSigned(totalIncome, 'VND', '+'), tone: 'text-income' },
+    { label: 'Tổng chi', value: formatSigned(totalExpense, 'VND', '−'), tone: 'text-expense' },
     {
       label: 'Chênh lệch',
-      value: `${netSavings >= 0 ? '+' : ''}${formatCurrency(netSavings, 'VND')}`,
+      value: formatSigned(netSavings, 'VND', netSavings > 0 ? '+' : '−'),
       tone: netSavings >= 0 ? 'text-ink' : 'text-warn',
     },
   ];
 
   return (
-    <div className="space-y-6">
+    <Stagger className="space-y-6">
       {/* Range Selector */}
+      <StaggerItem>
       <ToneTabs tabs={RANGE_TABS} value={range} onChange={setRange} label="Khoảng thời gian" />
 
+      </StaggerItem>
+
       {/* Summary row */}
+      <StaggerItem>
       <Card as="div" className="p-0 sm:p-0">
         <dl className="grid grid-cols-2 sm:grid-cols-3">
           {stats.map((stat, i) => (
@@ -137,7 +142,10 @@ export const AnalyticsView: React.FC = () => {
         </dl>
       </Card>
 
+      </StaggerItem>
+
       {/* Category breakdown */}
+      <StaggerItem>
       <Card aria-labelledby="breakdown-heading">
         <CardHeader
           id="breakdown-heading"
@@ -185,6 +193,7 @@ export const AnalyticsView: React.FC = () => {
           </ul>
         )}
       </Card>
-    </div>
+      </StaggerItem>
+    </Stagger>
   );
 };

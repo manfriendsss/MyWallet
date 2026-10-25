@@ -1,13 +1,35 @@
 import React from 'react';
+import { motion, type Variants } from 'framer-motion';
 import { Plus } from 'lucide-react';
 import { ColorTile } from './Swatches';
 import { cn } from '../../utils/cn';
 
+const tileGridVariants: Variants = {
+  hidden: {},
+  show: { transition: { staggerChildren: 0.04 } },
+};
+
+const tileVariants: Variants = {
+  hidden: { opacity: 0, scale: 0.96, y: 8 },
+  show: {
+    opacity: 1,
+    scale: 1,
+    y: 0,
+    transition: { duration: 0.3 },
+  },
+};
+
 /** Three-across grid used by wallets and categories */
 export const TileGrid: React.FC<{ children: React.ReactNode; label: string }> = ({ children, label }) => (
-  <ul aria-label={label} className="grid grid-cols-3 gap-2 sm:gap-3">
+  <motion.ul
+    aria-label={label}
+    className="grid grid-cols-3 gap-2 sm:gap-3"
+    variants={tileGridVariants}
+    initial="hidden"
+    animate="show"
+  >
     {children}
-  </ul>
+  </motion.ul>
 );
 
 /** One record: its icon on top, the name, then the amount. Tapping opens its edit form. */
@@ -23,7 +45,7 @@ export const GridTile: React.FC<{
   onClick: () => void;
   editLabel: string;
 }> = ({ color, icon, name, amount, sub, muted, debt, onClick, editLabel }) => (
-  <li className="min-w-0">
+  <motion.li className="min-w-0" variants={tileVariants}>
     <button
       type="button"
       onClick={onClick}
@@ -46,12 +68,12 @@ export const GridTile: React.FC<{
       </span>
       {sub && <span className="figure w-full break-words text-[11px] leading-tight text-muted">{sub}</span>}
     </button>
-  </li>
+  </motion.li>
 );
 
 /** The dashed "+" tile that closes each grid */
 export const AddTile: React.FC<{ label: string; onClick: () => void }> = ({ label, onClick }) => (
-  <li className="min-w-0">
+  <motion.li className="min-w-0" variants={tileVariants}>
     <button
       type="button"
       onClick={onClick}
@@ -62,5 +84,5 @@ export const AddTile: React.FC<{ label: string; onClick: () => void }> = ({ labe
       </span>
       <span className="text-xs font-semibold sm:text-sm">{label}</span>
     </button>
-  </li>
+  </motion.li>
 );

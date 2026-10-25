@@ -1,6 +1,6 @@
 import React from 'react';
 import { useWallet } from '../../context/WalletContext';
-import { formatCurrency } from '../../utils/formatters';
+import { formatCurrency, formatSigned } from '../../utils/formatters';
 import { CARD_ART } from '../../assets/cards';
 import { cn } from '../../utils/cn';
 
@@ -16,17 +16,17 @@ export const TotalBalanceCard: React.FC = () => {
   const stats = [
     {
       label: 'Thu tháng này',
-      value: `+${formatCurrency(totalIncomeThisMonthVnd, 'VND')}`,
+      value: formatSigned(totalIncomeThisMonthVnd, 'VND', '+'),
       tone: 'text-income',
     },
     {
       label: 'Chi tháng này',
-      value: `−${formatCurrency(totalExpenseThisMonthVnd, 'VND')}`,
+      value: formatSigned(totalExpenseThisMonthVnd, 'VND', '−'),
       tone: 'text-expense',
     },
     {
       label: 'Dư ròng',
-      value: `${netSavings >= 0 ? '+' : ''}${formatCurrency(netSavings, 'VND')}`,
+      value: formatSigned(netSavings, 'VND', netSavings > 0 ? '+' : '−'),
       note: totalIncomeThisMonthVnd > 0 ? `${savingsRate}% thu nhập` : undefined,
       tone: netSavings >= 0 ? 'text-ink' : 'text-warn',
     },

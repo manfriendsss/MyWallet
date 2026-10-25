@@ -11,6 +11,7 @@ import { Button } from '../ui/Button';
 import type { AiProvider } from '../../types';
 import { callGeminiApi, callDeepSeekApi } from '../../services/ai';
 import { DEFAULT_AI_SETTINGS, SERVER_KEY } from '../../services/ai';
+import { Stagger, StaggerItem } from '../ui/Stagger';
 
 const GEMINI_MODEL_OPTIONS = [
   { value: 'gemini-3.8-flash', label: 'Gemini 3.8 Flash', hint: 'mới nhất, khuyên dùng' },
@@ -245,11 +246,14 @@ export const SettingsView: React.FC = () => {
   };
 
   return (
-    <div className="mx-auto max-w-3xl space-y-6">
+    <Stagger className="mx-auto max-w-3xl space-y-6">
       {/* 0. Account */}
-      <AccountCard />
+      <StaggerItem>
+        <AccountCard />
+      </StaggerItem>
 
       {/* 1. AI */}
+      <StaggerItem>
       <Card aria-labelledby="ai-heading">
         <CardHeader
           id="ai-heading"
@@ -356,8 +360,10 @@ export const SettingsView: React.FC = () => {
           </div>
         </form>
       </Card>
+      </StaggerItem>
 
       {/* 3. Theme */}
+      <StaggerItem>
       <Card aria-labelledby="theme-heading">
         <CardHeader id="theme-heading" title="Giao diện" />
         <div className="seg" role="group" aria-label="Chế độ giao diện">
@@ -373,8 +379,10 @@ export const SettingsView: React.FC = () => {
           ))}
         </div>
       </Card>
+      </StaggerItem>
 
       {/* 4. Data */}
+      <StaggerItem>
       <Card aria-labelledby="data-heading">
         <CardHeader
           id="data-heading"
@@ -404,6 +412,7 @@ export const SettingsView: React.FC = () => {
           </Button>
         </div>
       </Card>
-    </div>
+      </StaggerItem>
+    </Stagger>
   );
 };

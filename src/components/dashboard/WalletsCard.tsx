@@ -1,5 +1,17 @@
 import React, { useMemo, useState } from 'react';
-import { ArrowLeftRight, CreditCard, Globe, Landmark, Trash2, Wallet as WalletIcon } from 'lucide-react';
+import {
+  ArrowLeftRight,
+  Banknote,
+  Bitcoin,
+  Coins,
+  CreditCard,
+  Globe,
+  Landmark,
+  PiggyBank,
+  Smartphone,
+  Trash2,
+  Wallet as WalletIcon,
+} from 'lucide-react';
 import { ToneTabs } from '../ui/ToneTabs';
 import { useWallet } from '../../context/WalletContext';
 import { Card, CardHeader } from '../ui/Card';
@@ -17,17 +29,27 @@ import { cn } from '../../utils/cn';
 
 const WALLET_ICONS: Record<string, React.ElementType> = {
   Wallet: WalletIcon,
+  Banknote,
   Landmark,
   CreditCard,
   PayPal: PaypalIcon,
+  Smartphone,
+  PiggyBank,
+  Coins,
+  Bitcoin,
   Globe,
 };
 
 const ICON_OPTIONS = [
   { id: 'Wallet', label: 'Ví' },
+  { id: 'Banknote', label: 'Tiền mặt' },
   { id: 'Landmark', label: 'Ngân hàng' },
   { id: 'CreditCard', label: 'Thẻ' },
   { id: 'PayPal', label: 'PayPal' },
+  { id: 'Smartphone', label: 'Ví điện tử' },
+  { id: 'PiggyBank', label: 'Tiết kiệm' },
+  { id: 'Coins', label: 'Đầu tư' },
+  { id: 'Bitcoin', label: 'Crypto' },
   { id: 'Globe', label: 'Quốc tế' },
 ];
 
@@ -214,7 +236,6 @@ export const WalletsCard: React.FC = () => {
         isOpen={isAddModalOpen}
         onClose={() => setIsAddModalOpen(false)}
         title="Thêm nguồn tiền"
-        description="Ví tiền mặt, tài khoản ngân hàng, PayPal hoặc tài khoản ngoại tệ."
       >
         <form onSubmit={handleCreateWallet} className="space-y-5">
           <ToneTabs
@@ -297,7 +318,6 @@ export const WalletsCard: React.FC = () => {
                 onChange={(e) => setCreditLimit(e.target.value)}
                 className="field figure"
               />
-              <p className="hint">Quẹt thẻ thì ghi chi tiêu vào thẻ này; khi trả nợ, mở thẻ và chọn "Trả nợ thẻ".</p>
             </div>
           )}
 
@@ -327,7 +347,6 @@ export const WalletsCard: React.FC = () => {
         isOpen={Boolean(editingWallet)}
         onClose={() => setEditingWallet(null)}
         title="Sửa nguồn tiền"
-        description="Số dư hiện tại được tính lại từ số dư đầu kỳ cộng các giao dịch."
       >
         <form onSubmit={handleUpdateWallet} className="space-y-5">
           <div>

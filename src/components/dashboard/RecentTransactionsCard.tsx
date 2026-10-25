@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { motion, type Variants } from 'framer-motion';
 import { ReceiptText, Plus } from 'lucide-react';
 import { useWallet } from '../../context/WalletContext';
 import { Card, CardHeader } from '../ui/Card';
@@ -14,6 +15,11 @@ const FILTERS: Array<ToneTab<Filter>> = [
   { id: 'income', label: 'Thu', tone: 'income' },
   { id: 'expense', label: 'Chi', tone: 'expense' },
 ];
+
+const transactionListVariants: Variants = {
+  hidden: {},
+  show: { transition: { staggerChildren: 0.035 } },
+};
 
 export const RecentTransactionsCard: React.FC = () => {
   const { transactions, categories, wallets, deleteTransaction, openAssistant } = useWallet();
@@ -53,10 +59,17 @@ export const RecentTransactionsCard: React.FC = () => {
           </Button>
         </div>
       ) : (
-        <ul className="divide-y divide-rule border-t border-rule">
-          {filteredTransactions.map((tx) => (
+        <motion.ul
+          key={filter}
+          className="divide-y divide-rule border-t border-rule"
+          variants={transactionListVariants}
+          initial="hidden"
+          animate="show"
+        >
+          {filteredTransactions.map((tx, index) => (
             <TransactionRow
               key={tx.id}
+              index={index}
               tx={tx}
               category={categories.find((c) => c.id === tx.categoryId)}
               wallet={wallets.find((w) => w.id === tx.walletId)}
@@ -64,7 +77,7 @@ export const RecentTransactionsCard: React.FC = () => {
               onDelete={deleteTransaction}
             />
           ))}
-        </ul>
+        </motion.ul>
       )}
     </Card>
   );

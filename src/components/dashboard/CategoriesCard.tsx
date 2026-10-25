@@ -3,7 +3,7 @@ import { useWallet } from '../../context/WalletContext';
 import { Card, CardHeader } from '../ui/Card';
 import { Modal } from '../ui/Modal';
 import { Button } from '../ui/Button';
-import { IconRenderer } from '../ui/IconRenderer';
+import { IconRenderer, CATEGORY_ICON_GROUPS } from '../ui/IconRenderer';
 import { Swatches } from '../ui/Swatches';
 import { TileGrid, GridTile, AddTile } from '../ui/GridTile';
 import { ToneTabs } from '../ui/ToneTabs';
@@ -12,11 +12,7 @@ import { formatCurrency } from '../../utils/formatters';
 import { CARD_ART } from '../../assets/cards';
 import { cn } from '../../utils/cn';
 
-const AVAILABLE_ICONS = [
-  'Utensils', 'ShoppingBag', 'Car', 'Home', 'Film', 'HeartPulse',
-  'GraduationCap', 'Coffee', 'Plane', 'Laptop', 'Gift', 'Briefcase',
-  'Award', 'TrendingUp', 'WalletCards', 'CircleEllipsis',
-];
+
 
 const AVAILABLE_COLORS = [
   '#f97316', '#ea580c', '#f59e0b', '#10b981', '#16a34a', '#84cc16',
@@ -147,28 +143,36 @@ export const CategoriesCard: React.FC = () => {
 
           <fieldset>
             <legend className="label">Biểu tượng</legend>
-            <div role="radiogroup" aria-label="Biểu tượng" className="grid grid-cols-6 sm:grid-cols-8 gap-2">
-              {AVAILABLE_ICONS.map((ic) => {
-                const isSelected = icon === ic;
-                return (
-                  <button
-                    key={ic}
-                    type="button"
-                    role="radio"
-                    aria-checked={isSelected}
-                    aria-label={ic}
-                    onClick={() => setIcon(ic)}
-                    className={cn(
-                      'grid h-10 place-items-center rounded-control border transition-colors',
-                      isSelected
-                        ? 'border-accent bg-accent-soft text-ink'
-                        : 'border-rule-strong text-muted hover:bg-paper-2 hover:text-ink'
-                    )}
-                  >
-                    <IconRenderer name={ic} className="w-4 h-4" />
-                  </button>
-                );
-              })}
+            {/* Grouped by topic, scrolls inside the form */}
+            <div role="radiogroup" aria-label="Biểu tượng" className="max-h-64 space-y-3 overflow-y-auto pr-1">
+              {CATEGORY_ICON_GROUPS.map((group) => (
+                <div key={group.label}>
+                  <p className="mb-1.5 text-xs font-semibold text-muted">{group.label}</p>
+                  <div className="grid grid-cols-6 sm:grid-cols-8 gap-2">
+                    {group.icons.map((ic) => {
+                      const isSelected = icon === ic;
+                      return (
+                        <button
+                          key={ic}
+                          type="button"
+                          role="radio"
+                          aria-checked={isSelected}
+                          aria-label={`${group.label}: ${ic}`}
+                          onClick={() => setIcon(ic)}
+                          className={cn(
+                            'grid h-10 place-items-center rounded-control border transition-colors',
+                            isSelected
+                              ? 'border-accent bg-accent-soft text-ink'
+                              : 'border-rule-strong text-muted hover:bg-paper-2 hover:text-ink'
+                          )}
+                        >
+                          <IconRenderer name={ic} className="w-[18px] h-[18px]" />
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+              ))}
             </div>
           </fieldset>
 

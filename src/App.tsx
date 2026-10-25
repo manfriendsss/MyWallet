@@ -1,4 +1,4 @@
-import React, { Suspense, lazy, useEffect } from 'react';
+import React, { Suspense, lazy, useEffect, useState } from 'react';
 import { MotionConfig } from 'framer-motion';
 import { ThemeProvider } from './context/ThemeContext';
 import { WalletProvider, useWallet } from './context/WalletContext';
@@ -21,18 +21,23 @@ const loadAnalytics = () =>
   import('./components/analytics/AnalyticsView').then((m) => ({ default: m.AnalyticsView }));
 const loadSettings = () =>
   import('./components/settings/SettingsView').then((m) => ({ default: m.SettingsView }));
+const loadAssistant = () =>
+  import('./components/assistant/AiAssistantSheet').then((m) => ({ default: m.AiAssistantSheet }));
 
 // Code-splitting lazy loads to optimize bundle size and startup speed
 const BentoDashboard = lazy(loadDashboard);
 const MonthlyCalendar = lazy(loadCalendar);
 const AnalyticsView = lazy(loadAnalytics);
 const SettingsView = lazy(loadSettings);
-const AiAssistantSheet = lazy(() =>
-  import('./components/assistant/AiAssistantSheet').then((m) => ({ default: m.AiAssistantSheet }))
-);
+const AiAssistantSheet = lazy(loadAssistant);
 
 const AppContent: React.FC = () => {
-  const { activeTab, isReady } = useWallet();
+  const { activeTab, isReady, isAssistantOpen } = useWallet();
+  const [assistantLoaded, setAssistantLoaded] = useState(false);
+
+  useEffect(() => {
+    if (isAssistantOpen) setAssistantLoaded(true);
+  }, [isAssistantOpen]);
 
   // Warm the other tab chunks once the browser is idle after first paint
   useEffect(() => {
@@ -40,6 +45,7 @@ const AppContent: React.FC = () => {
       void loadCalendar();
       void loadAnalytics();
       void loadSettings();
+      void loadAssistant();
     };
     if (typeof window.requestIdleCallback === 'function') {
       const id = window.requestIdleCallback(prefetch);
@@ -74,7 +80,7 @@ const AppContent: React.FC = () => {
 
       {/* Persistent AI Assistant Bottom Sheet */}
       <Suspense fallback={null}>
-        <AiAssistantSheet />
+        {assistantLoaded && <AiAssistantSheet />}
       </Suspense>
     </AppLayout>
   );

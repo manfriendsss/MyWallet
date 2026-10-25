@@ -12,7 +12,6 @@ import {
   isSameDay,
   isToday,
 } from 'date-fns';
-import { vi } from 'date-fns/locale';
 import { motion, AnimatePresence } from 'framer-motion';
 import { ChevronLeft, ChevronRight, Plus } from 'lucide-react';
 import { useWallet } from '../../context/WalletContext';
@@ -20,9 +19,10 @@ import { Card } from '../ui/Card';
 import { Modal } from '../ui/Modal';
 import { Button } from '../ui/Button';
 import { TransactionRow } from '../dashboard/TransactionRow';
-import { formatCompactCurrency, formatCurrency, formatDate } from '../../utils/formatters';
+import { formatCurrency, formatDate, formatSigned } from '../../utils/formatters';
 import { cn } from '../../utils/cn';
 import { CARD_ART } from '../../assets/cards';
+import { Stagger, StaggerItem } from '../ui/Stagger';
 
 export const MonthlyCalendar: React.FC = () => {
   const { transactions, categories, wallets, openAssistant } = useWallet();
@@ -86,7 +86,7 @@ export const MonthlyCalendar: React.FC = () => {
   const isCurrentMonthView = isSameMonth(currentDate, new Date());
 
   return (
-    <div className="relative space-y-6">
+    <Stagger className="relative space-y-6">
       {/* Large, faded calendar art resting in the top-right corner, behind every word */}
       <img
         src={CARD_ART.calendar}
@@ -99,47 +99,54 @@ export const MonthlyCalendar: React.FC = () => {
       />
 
       {/* Month selector & totals */}
-      <div className="relative z-[1] flex flex-wrap items-end justify-between gap-4">
-        <div className="flex items-center gap-2">
+      <StaggerItem>
+      <div className="relative z-[1] space-y-4">
+        {/* Month: arrows at the edges, the month centred between them */}
+        <div className="flex w-full items-center gap-2">
           <button
             type="button"
             onClick={prevMonth}
             aria-label="Tháng trước"
-            className="grid h-10 w-10 place-items-center rounded-control border border-rule-strong bg-surface text-ink hover:bg-paper-2 transition-colors"
+            className="grid h-10 w-10 shrink-0 place-items-center rounded-control border border-rule-strong bg-surface text-ink hover:bg-paper-2 transition-colors"
           >
             <ChevronLeft className="w-5 h-5" aria-hidden="true" />
           </button>
-          <h2 aria-live="polite" className="min-w-[10ch] text-center text-xl text-ink capitalize">
-            {format(currentDate, 'MMMM yyyy', { locale: vi })}
-          </h2>
+          <div className="flex min-w-0 flex-1 flex-col items-center">
+            <h2 aria-live="polite" className="figure text-center text-xl text-ink">
+              Tháng {format(currentDate, 'MM/yyyy')}
+            </h2>
+            {!isCurrentMonthView && (
+              <button type="button" onClick={goToday} className="mt-0.5 text-xs font-semibold text-accent hover:underline">
+                Về tháng này
+              </button>
+            )}
+          </div>
           <button
             type="button"
             onClick={nextMonth}
             aria-label="Tháng sau"
-            className="grid h-10 w-10 place-items-center rounded-control border border-rule-strong bg-surface text-ink hover:bg-paper-2 transition-colors"
+            className="grid h-10 w-10 shrink-0 place-items-center rounded-control border border-rule-strong bg-surface text-ink hover:bg-paper-2 transition-colors"
           >
             <ChevronRight className="w-5 h-5" aria-hidden="true" />
           </button>
-          {!isCurrentMonthView && (
-            <Button variant="ghost" size="sm" onClick={goToday}>
-              Về tháng này
-            </Button>
-          )}
         </div>
 
-        <dl className="flex gap-6">
-          <div>
+        {/* This month's in and out, half the width each */}
+        <dl className="grid grid-cols-2 overflow-hidden rounded-control border border-rule bg-surface">
+          <div className="px-4 py-3 text-center">
             <dt className="text-sm text-muted">Thu</dt>
-            <dd className="figure text-lg font-bold text-income">+{formatCompactCurrency(monthTotalIncome, 'VND')}</dd>
+            <dd className="figure text-lg font-bold text-income">{formatSigned(monthTotalIncome, 'VND', '+')}</dd>
           </div>
-          <div className="border-l border-rule pl-6">
+          <div className="border-l border-rule px-4 py-3 text-center">
             <dt className="text-sm text-muted">Chi</dt>
-            <dd className="figure text-lg font-bold text-expense">−{formatCompactCurrency(monthTotalExpense, 'VND')}</dd>
+            <dd className="figure text-lg font-bold text-expense">{formatSigned(monthTotalExpense, 'VND', '−')}</dd>
           </div>
         </dl>
       </div>
+      </StaggerItem>
 
       {/* Calendar Grid */}
+      <StaggerItem>
       <Card className="relative z-[1] p-2 sm:p-4 overflow-hidden">
         <div className="grid grid-cols-7 text-center" aria-hidden="true">
           {weekDayHeaders.map((dayName) => (
@@ -217,6 +224,7 @@ export const MonthlyCalendar: React.FC = () => {
           </motion.div>
         </AnimatePresence>
       </Card>
+      </StaggerItem>
 
       {/* Modal: Chi tiết giao dịch ngày được bấm */}
       <Modal
@@ -275,6 +283,6 @@ export const MonthlyCalendar: React.FC = () => {
           </>
         )}
       </Modal>
-    </div>
+    </Stagger>
   );
 };

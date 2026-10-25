@@ -57,6 +57,7 @@ export const CardHeader: React.FC<{
           src={art}
           alt=""
           aria-hidden="true"
+          loading="lazy"
           decoding="async"
           width={48}
           height={48}
