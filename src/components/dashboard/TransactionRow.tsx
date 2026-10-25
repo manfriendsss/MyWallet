@@ -1,10 +1,10 @@
-import React, { useEffect, useState } from 'react';
-import { motion } from 'framer-motion';
-import { ArrowLeftRight, Trash2 } from 'lucide-react';
+import React, { useRef, useState } from 'react';
+import { motion, type PanInfo } from 'framer-motion';
+import { ArrowLeftRight, Pencil, Trash2 } from 'lucide-react';
 import type { Category, Transaction, Wallet } from '../../types';
+import { formatCurrency, formatShortDate, formatSigned } from '../../utils/formatters';
 import { IconRenderer } from '../ui/IconRenderer';
 import { ColorTile } from '../ui/Swatches';
-import { formatCurrency, formatShortDate } from '../../utils/formatters';
 
 interface TransactionRowProps {
   tx: Transaction;
@@ -14,10 +14,11 @@ interface TransactionRowProps {
   toWallet?: Wallet;
   showDate?: boolean;
   onDelete?: (id: string) => void;
+  onEdit?: (tx: Transaction) => void;
   index?: number;
 }
 
-/** One ledger line. Delete asks once, inline, and the question clears itself after a few seconds. */
+/** One ledger line with touch actions tucked behind its content. */
 export const TransactionRow: React.FC<TransactionRowProps> = ({
   tx,
   category,
@@ -25,83 +26,144 @@ export const TransactionRow: React.FC<TransactionRowProps> = ({
   toWallet,
   showDate = true,
   onDelete,
+  onEdit,
   index,
 }) => {
-  const [confirming, setConfirming] = useState(false);
+  const [isOpen, setIsOpen] = useState(false);
   const isIncome = tx.type === 'income';
   const isTransfer = tx.type === 'transfer';
   const isForeign = tx.currency !== 'VND';
   const title = tx.note || category?.name || (isTransfer ? 'Chuyển tiền' : 'Giao dịch');
-  const sign = isTransfer ? '' : isIncome ? '+' : '−';
   const tone = isTransfer ? 'text-ink-2' : isIncome ? 'text-income' : 'text-expense';
-
-  useEffect(() => {
-    if (!confirming) return;
-    const t = setTimeout(() => setConfirming(false), 4000);
-    return () => clearTimeout(t);
-  }, [confirming]);
-
+  const amount = isTransfer
+    ? formatCurrency(tx.amount, tx.currency)
+    : formatSigned(tx.amount, tx.currency, isIncome ? '+' : '−');
   const from = wallet?.name ?? 'Ví đã xóa';
   const where = isTransfer ? `${from} → ${toWallet?.name ?? 'Ví đã xóa'}` : from;
   const meta = [where, showDate ? formatShortDate(tx.date) : null, tx.time].filter(Boolean).join(', ');
+  const canSwipe = Boolean(onEdit || onDelete);
+
+  // A swipe ends with a click on the row; that click must not open the edit form
+  const draggedAt = useRef(0);
+
+  const handleBodyClick = () => {
+    if (Date.now() - draggedAt.current < 350) return;
+    if (isOpen) {
+      setIsOpen(false);
+      return;
+    }
+    onEdit?.(tx);
+  };
+
+  const handleDelete = () => {
+    setIsOpen(false);
+    navigator.vibrate?.(15);
+    onDelete?.(tx.id);
+  };
+
+  const handleDragEnd = (_event: MouseEvent | TouchEvent | PointerEvent, info: PanInfo) => {
+    if (Math.abs(info.offset.x) > 4) draggedAt.current = Date.now();
+    setIsOpen(info.offset.x < -56);
+  };
 
   return (
     <motion.li
-      className="flex items-center gap-3 py-3"
+      className="relative overflow-hidden"
       initial={{ opacity: 0, y: 8 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.3, delay: Math.min(index ?? 0, 10) * 0.035 }}
     >
-      {isTransfer ? (
-        <ColorTile color={toWallet?.color}>
-          <ArrowLeftRight className="w-[18px] h-[18px]" />
-        </ColorTile>
-      ) : (
-        <ColorTile color={category?.color}>
-          <IconRenderer name={category?.icon || 'CircleDot'} className="w-[18px] h-[18px]" />
-        </ColorTile>
+      {canSwipe && (
+        <div className="absolute inset-y-0 right-0 flex items-stretch" aria-hidden={!isOpen}>
+          {onEdit && (
+            <button
+              type="button"
+              tabIndex={isOpen ? 0 : -1}
+              aria-label={`Sửa ${title}`}
+              onClick={() => {
+                setIsOpen(false);
+                onEdit(tx);
+              }}
+              className="flex w-16 flex-col items-center justify-center gap-1 bg-accent text-xs font-semibold text-accent-ink"
+            >
+              <Pencil className="h-4 w-4" aria-hidden="true" />
+              Sửa
+            </button>
+          )}
+          {onDelete && (
+            <button
+              type="button"
+              tabIndex={isOpen ? 0 : -1}
+              aria-label={`Xóa ${title}`}
+              onClick={handleDelete}
+              className="flex w-16 flex-col items-center justify-center gap-1 bg-expense text-xs font-semibold text-accent-ink"
+            >
+              <Trash2 className="h-4 w-4" aria-hidden="true" />
+              Xóa
+            </button>
+          )}
+        </div>
       )}
 
-      <div className="min-w-0 flex-1">
-        <p className="flex items-center gap-1.5 text-sm font-semibold text-ink">
-          <span className="truncate">{title}</span>
-          {tx.isAiGenerated && (
-            <span title="Tạo bởi trợ lý AI" className="shrink-0 rounded-chip bg-paper-3 px-1.5 text-xs font-semibold text-muted">
-              AI
-            </span>
+      <motion.div
+        drag={canSwipe ? 'x' : false}
+        dragConstraints={{ left: -132, right: 0 }}
+        dragElastic={0.08}
+        dragDirectionLock
+        onDragEnd={handleDragEnd}
+        animate={{ x: isOpen ? -132 : 0 }}
+        transition={{ type: 'spring', stiffness: 420, damping: 38 }}
+        className="relative flex items-center gap-3 bg-surface py-3"
+      >
+        <button
+          type="button"
+          onClick={handleBodyClick}
+          disabled={!onEdit}
+          aria-label={onEdit ? `Sửa ${title}` : title}
+          className="flex min-w-0 flex-1 items-center gap-3 text-left"
+        >
+          {isTransfer ? (
+            <ColorTile color={toWallet?.color}>
+              <ArrowLeftRight className="h-[18px] w-[18px]" />
+            </ColorTile>
+          ) : (
+            <ColorTile color={category?.color}>
+              <IconRenderer name={category?.icon || 'CircleDot'} className="h-[18px] w-[18px]" />
+            </ColorTile>
           )}
-        </p>
-        <p className="figure mt-0.5 truncate text-xs text-muted">{meta}</p>
-      </div>
 
-      <div className="text-right">
-        <p className={`figure text-sm font-bold ${tone}`}>{`${sign}${formatCurrency(tx.amount, tx.currency)}`}</p>
-        {isForeign && (
-          <p className="figure text-xs text-muted">{`≈ ${formatCurrency(tx.amountVnd, 'VND')}`}</p>
-        )}
-      </div>
+          <span className="min-w-0 flex-1">
+            <span className="flex items-center gap-1.5 text-sm font-semibold text-ink">
+              <span className="truncate">{title}</span>
+              {tx.isAiGenerated && (
+                <span title="Tạo bởi trợ lý AI" className="shrink-0 rounded-chip bg-paper-3 px-1.5 text-xs font-semibold text-muted">
+                  AI
+                </span>
+              )}
+            </span>
+            <span className="figure mt-0.5 block truncate text-xs text-muted">{meta}</span>
+          </span>
 
-      {onDelete &&
-        (confirming ? (
+          <span className="shrink-0 text-right">
+            <span className={`figure block text-sm font-bold ${tone}`}>{amount}</span>
+            {isForeign && (
+              <span className="figure block text-xs text-muted">≈ {formatCurrency(tx.amountVnd, 'VND')}</span>
+            )}
+          </span>
+        </button>
+
+        {onDelete && (
           <button
             type="button"
-            onClick={() => onDelete(tx.id)}
-            className="h-8 shrink-0 rounded-control border border-rule-strong px-2.5 text-xs font-semibold text-expense hover:bg-expense-soft transition-colors"
-            aria-label={`Xác nhận xóa ${title}`}
-          >
-            Xóa?
-          </button>
-        ) : (
-          <button
-            type="button"
-            onClick={() => setConfirming(true)}
-            className="-mr-2 grid h-10 w-8 sm:w-10 shrink-0 place-items-center rounded-control text-muted hover:bg-expense-soft hover:text-expense transition-colors"
+            onClick={handleDelete}
+            className="-mr-2 hidden h-10 w-10 shrink-0 place-items-center rounded-control text-muted transition-colors hover:bg-expense-soft hover:text-expense sm:grid"
             aria-label={`Xóa ${title}`}
             title="Xóa giao dịch"
           >
-            <Trash2 className="w-4 h-4" aria-hidden="true" />
+            <Trash2 className="h-4 w-4" aria-hidden="true" />
           </button>
-        ))}
+        )}
+      </motion.div>
     </motion.li>
   );
 };

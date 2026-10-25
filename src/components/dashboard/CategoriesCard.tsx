@@ -29,6 +29,7 @@ export const CategoriesCard: React.FC = () => {
   const [name, setName] = useState('');
   const [icon, setIcon] = useState('Tag');
   const [color, setColor] = useState('#f97316');
+  const [budget, setBudget] = useState('');
 
   const tabCategories = categories.filter((c) => c.type === activeTab);
 
@@ -48,6 +49,7 @@ export const CategoriesCard: React.FC = () => {
     setName('');
     setIcon('Tag');
     setColor('#f97316');
+    setBudget('');
     setIsFormOpen(true);
   };
 
@@ -56,6 +58,7 @@ export const CategoriesCard: React.FC = () => {
     setName(cat.name);
     setIcon(cat.icon);
     setColor(cat.color);
+    setBudget(cat.budget && cat.budget > 0 ? String(cat.budget) : '');
     setIsFormOpen(true);
   };
 
@@ -63,11 +66,26 @@ export const CategoriesCard: React.FC = () => {
     e.preventDefault();
     const cleanName = name.trim().slice(0, 40);
     if (!cleanName) return;
+    const parsedBudget = Number(budget);
+    const categoryBudget = budget.trim() && Number.isFinite(parsedBudget) && parsedBudget > 0
+      ? parsedBudget
+      : undefined;
 
     if (editing) {
-      updateCategory(editing.id, { name: cleanName, icon, color });
+      updateCategory(editing.id, {
+        name: cleanName,
+        icon,
+        color,
+        ...(formType === 'expense' ? { budget: categoryBudget } : {}),
+      });
     } else {
-      addCategory({ name: cleanName, type: activeTab, icon, color });
+      addCategory({
+        name: cleanName,
+        type: activeTab,
+        icon,
+        color,
+        ...(formType === 'expense' ? { budget: categoryBudget } : {}),
+      });
     }
     setIsFormOpen(false);
   };
@@ -106,6 +124,11 @@ export const CategoriesCard: React.FC = () => {
               name={cat.name}
               amount={formatCurrency(totalThisMonth, 'VND')}
               muted={!totalThisMonth}
+              progress={
+                cat.type === 'expense' && cat.budget && cat.budget > 0
+                  ? { spent: totalThisMonth, budget: cat.budget }
+                  : undefined
+              }
               onClick={() => openEdit(cat)}
               editLabel="Sửa danh mục"
             />
@@ -177,6 +200,26 @@ export const CategoriesCard: React.FC = () => {
           </fieldset>
 
           <Swatches label="Màu sắc" colors={AVAILABLE_COLORS} value={color} onChange={setColor} />
+
+          {formType === 'expense' ? (
+            <div>
+              <label htmlFor="category-budget" className="label">
+                Ngân sách tháng (đ)
+              </label>
+              <input
+                id="category-budget"
+                name="categoryBudget"
+                type="number"
+                inputMode="decimal"
+                step="any"
+                min="0"
+                placeholder="Không giới hạn"
+                value={budget}
+                onChange={(e) => setBudget(e.target.value)}
+                className="field"
+              />
+            </div>
+          ) : null}
 
           <div className="flex gap-2 pt-2">
             <Button variant="outline" onClick={() => setIsFormOpen(false)} className="flex-1">

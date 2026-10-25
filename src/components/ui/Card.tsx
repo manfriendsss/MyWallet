@@ -50,7 +50,7 @@ export const CardHeader: React.FC<{
   id?: string;
   art?: string;
 }> = ({ title, description, action, id, art }) => (
-  <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-3 pb-4">
+  <div className="flex items-center justify-between gap-3 pb-4">
     <div className="flex min-w-0 items-center gap-3">
       {art && (
         <img

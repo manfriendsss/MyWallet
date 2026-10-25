@@ -1,7 +1,7 @@
 import React, { useState, useRef, useEffect, useId } from 'react';
 import { createPortal } from 'react-dom';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Mic, MicOff, Send, Camera, X, Check, AlertCircle } from 'lucide-react';
+import { PenLine, Mic, MicOff, Send, Camera, X, Check, AlertCircle } from 'lucide-react';
 import confetti from 'canvas-confetti';
 import { useWallet } from '../../context/WalletContext';
 import { compressImageToWebP, ACCEPTED_IMAGE_TYPES } from '../../utils/imageCompressor';
@@ -11,6 +11,8 @@ import type { ParsedTransactionFromAi } from '../../types';
 import { formatCurrency } from '../../utils/formatters';
 import { toLocalISODate } from '../../utils/date';
 import { useDialog } from '../../utils/useDialog';
+import { receiptApi } from '../../services/api';
+import { TransactionFormModal } from '../transactions/TransactionForm';
 import { cn } from '../../utils/cn';
 
 interface ChatMessage {
@@ -58,6 +60,11 @@ export const AiAssistantSheet: React.FC = () => {
   const [isListening, setIsListening] = useState(false);
   const [speechError, setSpeechError] = useState<string | null>(null);
   const [currentPreview, setCurrentPreview] = useState<ParsedTransactionFromAi | null>(null);
+  /** Upload of the receipt photo being read (resolves to its key), attached to the transaction on save */
+  const receiptUpload = useRef<Promise<string | null> | null>(null);
+  /** While a photo is being read, the pill shows Gemini, which reads all images */
+  const [readingImage, setReadingImage] = useState(false);
+  const [manualOpen, setManualOpen] = useState(false);
 
   const fileInputRef = useRef<HTMLInputElement>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
@@ -152,6 +159,7 @@ export const AiAssistantSheet: React.FC = () => {
     }
 
     setIsProcessing(true);
+    setReadingImage(true);
     try {
       const compressed = await compressImageToWebP(file, 1600, 0.85);
 
@@ -159,6 +167,12 @@ export const AiAssistantSheet: React.FC = () => {
         ...prev,
         { id: `msg-${Date.now()}`, sender: 'user', text: 'Ảnh hóa đơn', imageUrl: compressed.dataUrl },
       ]);
+
+      // Keep the photo with the transaction: store it while Gemini reads it.
+      // Images always go to Gemini, whatever the chat provider is (DeepSeek cannot read images here).
+      if (aiSettings.keySource === 'server') {
+        receiptUpload.current = receiptApi.upload(compressed.blob).catch(() => null);
+      }
 
       const response = await callGeminiApi(
         geminiKey,
@@ -175,6 +189,7 @@ export const AiAssistantSheet: React.FC = () => {
       pushAi(`Không đọc được hóa đơn. ${err instanceof Error ? err.message : ''}`, { isError: true });
     } finally {
       setIsProcessing(false);
+      setReadingImage(false);
       if (fileInputRef.current) fileInputRef.current.value = '';
     }
   };
@@ -238,8 +253,10 @@ HÃY CẬP NHẬT LẠI VÀ CHỈ BÁO KẾT QUẢ NGẮN GỌN TRONG 1 CÂU THE
   const canSave = Boolean(currentPreview && currentPreview.amount > 0 && wallets.length > 0 && categories.length > 0);
 
   // Confirm and Save transaction
-  const handleConfirmSave = () => {
+  const handleConfirmSave = async () => {
     if (!currentPreview || !canSave) return;
+    // A photo still uploading is waited for, so it stays with the transaction
+    const receiptKey = receiptUpload.current ? await receiptUpload.current : null;
 
     // Find category ID or match first
     const targetType = currentPreview.type;
@@ -264,6 +281,7 @@ HÃY CẬP NHẬT LẠI VÀ CHỈ BÁO KẾT QUẢ NGẮN GỌN TRONG 1 CÂU THE
       date: currentPreview.date || toLocalISODate(),
       time: new Date().toTimeString().slice(0, 5),
       isAiGenerated: true,
+      receiptKey: receiptKey ?? undefined,
     });
 
     confetti({
@@ -274,11 +292,15 @@ HÃY CẬP NHẬT LẠI VÀ CHỈ BÁO KẾT QUẢ NGẮN GỌN TRONG 1 CÂU THE
     });
 
     setCurrentPreview(null);
+    receiptUpload.current = null;
     setMessages([]);
     closeAssistant();
   };
 
-  return createPortal(
+  return (
+    <>
+    <TransactionFormModal isOpen={manualOpen} onClose={() => setManualOpen(false)} />
+    {createPortal(
     <AnimatePresence>
       {isAssistantOpen && (
         <div className="fixed inset-0 z-[400] flex items-end justify-center sm:items-center sm:p-4">
@@ -312,7 +334,7 @@ HÃY CẬP NHẬT LẠI VÀ CHỈ BÁO KẾT QUẢ NGẮN GỌN TRONG 1 CÂU THE
                 <h2 id={titleId} className="text-lg text-ink">
                   Thêm giao dịch
                 </h2>
-                {hasCloudAi && <ProviderPill provider={aiSettings.provider} />}
+                {hasCloudAi && <ProviderPill provider={readingImage ? 'gemini' : aiSettings.provider} />}
               </div>
               <button type="button" onClick={closeAssistant} aria-label="Đóng" className={cn(iconButton, '-mr-2 -mt-1')}>
                 <X className="w-5 h-5" aria-hidden="true" />
@@ -446,6 +468,19 @@ HÃY CẬP NHẬT LẠI VÀ CHỈ BÁO KẾT QUẢ NGẮN GỌN TRONG 1 CÂU THE
                 />
                 <button
                   type="button"
+                  onClick={() => {
+                    // Typing it in by hand: swap the chat for the plain form
+                    closeAssistant();
+                    setManualOpen(true);
+                  }}
+                  className={iconButton}
+                  aria-label="Nhập tay"
+                  title="Nhập tay"
+                >
+                  <PenLine className="w-5 h-5" aria-hidden="true" />
+                </button>
+                <button
+                  type="button"
                   onClick={() => fileInputRef.current?.click()}
                   disabled={isProcessing}
                   className={iconButton}
@@ -504,5 +539,7 @@ HÃY CẬP NHẬT LẠI VÀ CHỈ BÁO KẾT QUẢ NGẮN GỌN TRONG 1 CÂU THE
       )}
     </AnimatePresence>,
     document.body
+  )}
+    </>
   );
 };

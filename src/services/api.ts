@@ -48,7 +48,65 @@ export const authApi = {
     api<{ user: AuthUser }>('/api/auth/password', { method: 'POST', body: { currentPassword, newPassword } }),
 };
 
-export type SyncKey = 'wallets' | 'categories' | 'transactions' | 'preferences';
+export interface PasskeyInfo {
+  id: string;
+  name: string | null;
+  createdAt: number;
+  lastUsedAt: number | null;
+}
+
+/** Passkeys: the device's fingerprint / Face ID instead of the password */
+export const passkeyApi = {
+  async register(name: string) {
+    const { startRegistration } = await import('@simplewebauthn/browser');
+    const { options, challengeId } = await api<{ options: any; challengeId: string }>('/api/auth/passkey/register-options', {
+      method: 'POST',
+      body: {},
+    });
+    const response = await startRegistration({ optionsJSON: options });
+    await api('/api/auth/passkey/register-verify', { method: 'POST', body: { challengeId, response, name } });
+  },
+  async login() {
+    const { startAuthentication } = await import('@simplewebauthn/browser');
+    const { options, challengeId } = await api<{ options: any; challengeId: string }>('/api/auth/passkey/login-options', {
+      method: 'POST',
+      body: {},
+    });
+    const response = await startAuthentication({ optionsJSON: options });
+    return api<{ user: AuthUser }>('/api/auth/passkey/login-verify', { method: 'POST', body: { challengeId, response } });
+  },
+  list: () => api<{ passkeys: PasskeyInfo[] }>('/api/auth/passkey'),
+  remove: (id: string) => api('/api/auth/passkey', { method: 'DELETE', body: { id } }),
+};
+
+/** Receipt photos, stored privately in R2 */
+export const receiptApi = {
+  async upload(image: Blob): Promise<string> {
+    let res: Response;
+    try {
+      res = await fetch('/api/receipts', {
+        method: 'POST',
+        credentials: 'same-origin',
+        headers: { 'Content-Type': image.type || 'image/webp' },
+        body: image,
+        signal: AbortSignal.timeout(30_000),
+      });
+    } catch {
+      throw new ApiError('Không tải được ảnh lên. Kiểm tra mạng.', 0);
+    }
+    const data = await res.json().catch(() => null);
+    if (!res.ok) throw new ApiError(data?.error?.message || `Lỗi tải ảnh (${res.status})`, res.status);
+    return data.key as string;
+  },
+  url: (key: string) => `/api/receipts/${key}`,
+};
+
+/** Whether this browser can use passkeys at all */
+export function passkeysSupported(): boolean {
+  return typeof window !== 'undefined' && typeof window.PublicKeyCredential === 'function';
+}
+
+export type SyncKey ='wallets' | 'categories' | 'transactions' | 'preferences';
 
 export const dataApi = {
   load: () => api<{ data: Partial<Record<SyncKey, { value: unknown; updatedAt: number }>> }>('/api/data'),

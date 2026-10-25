@@ -31,6 +31,9 @@ import {
   recalculateWalletBalances,
   INITIAL_CATEGORIES,
   FEE_CATEGORY,
+  loadWallets,
+  loadCategories,
+  loadTransactions,
 } from '../services/storage';
 import { newId, toLocalISODate } from '../utils/date';
 import { dataApi, type SyncKey } from '../services/api';
@@ -88,6 +91,39 @@ const WalletContext = createContext<WalletContextType | undefined>(undefined);
 
 export type SyncStatus = 'loading' | 'saving' | 'saved' | 'error' | 'offline';
 
+// --- Offline queue ---------------------------------------------------------------
+// Documents changed on this device but not yet confirmed by the server. Kept in localStorage,
+// so an edit made offline survives closing the app and is pushed before anything is pulled.
+const PENDING_KEY = 'mywallet_sync_pending';
+const ALL_KEYS: SyncKey[] = ['wallets', 'categories', 'transactions', 'preferences'];
+
+function readPending(): Set<SyncKey> {
+  try {
+    const raw = JSON.parse(localStorage.getItem(PENDING_KEY) ?? '[]');
+    return new Set((Array.isArray(raw) ? raw : []).filter((k): k is SyncKey => ALL_KEYS.includes(k)));
+  } catch {
+    return new Set();
+  }
+}
+function writePending(keys: Set<SyncKey>) {
+  try {
+    if (keys.size) localStorage.setItem(PENDING_KEY, JSON.stringify([...keys]));
+    else localStorage.removeItem(PENDING_KEY);
+  } catch {
+    // storage unavailable: nothing to persist
+  }
+}
+function markPending(...keys: SyncKey[]) {
+  const pending = readPending();
+  keys.forEach((k) => pending.add(k));
+  writePending(pending);
+}
+function clearPending(key: SyncKey) {
+  const pending = readPending();
+  pending.delete(key);
+  writePending(pending);
+}
+
 /** The settings worth syncing across devices; API keys never leave this browser */
 function pickPreferences(s: Partial<AiSettings>): Partial<AiSettings> {
   const out: Partial<AiSettings> = {};
@@ -116,11 +152,31 @@ export const WalletProvider: React.FC<{ children: React.ReactNode; syncEnabled?:
   const [exchangeRates, setExchangeRatesState] = useState<ExchangeRates>(getStoredExchangeRates());
   const [aiSettings, setAiSettingsState] = useState<AiSettings>(getStoredAiSettings());
 
+  /** Send every document still marked pending, from this browser's saved copy */
+  const flushPending = async () => {
+    const pending = readPending();
+    if (pending.size === 0) return;
+    const local: Record<SyncKey, () => unknown> = {
+      wallets: loadWallets,
+      categories: loadCategories,
+      transactions: loadTransactions,
+      preferences: () => pickPreferences(getStoredAiSettings()),
+    };
+    for (const key of pending) {
+      const value = local[key]();
+      await dataApi.save(key, value);
+      clearPending(key);
+      lastPushed.current[key] = JSON.stringify(value);
+    }
+  };
+
   /**
    * Load the account's data from the database (the source of truth; this browser keeps a cache).
    * An empty account starts clean: no sample wallets or transactions, just the default categories.
    */
   const pullFromServer = async () => {
+    // Local edits that never reached the server win: push them first, and stop if that fails
+    await flushPending();
     const { data: remote } = await dataApi.load();
     const hasRemote = Array.isArray(remote.wallets?.value) || Array.isArray(remote.transactions?.value);
     const next = hasRemote
@@ -193,6 +249,20 @@ export const WalletProvider: React.FC<{ children: React.ReactNode; syncEnabled?:
   }, []);
 
 
+  // Back online: send whatever was changed while offline
+  useEffect(() => {
+    if (!syncEnabled) return;
+    const onOnline = () => {
+      if (readPending().size === 0) return;
+      setSyncStatus('saving');
+      flushPending()
+        .then(() => setSyncStatus('saved'))
+        .catch(() => setSyncStatus('error'));
+    };
+    window.addEventListener('online', onOnline);
+    return () => window.removeEventListener('online', onOnline);
+  }, [syncEnabled]);
+
   // Push local changes to the database, batched: one save per changed document, shortly after the last edit
   useEffect(() => {
     if (!syncEnabled || !syncedRef.current) return;
@@ -212,6 +282,7 @@ export const WalletProvider: React.FC<{ children: React.ReactNode; syncEnabled?:
           const text = JSON.stringify(docs[k]);
           await dataApi.save(k, docs[k]);
           lastPushed.current[k] = text;
+          clearPending(k);
         })
       )
         .then(() => setSyncStatus('saved'))
@@ -241,6 +312,7 @@ export const WalletProvider: React.FC<{ children: React.ReactNode; syncEnabled?:
 
   // Recalculate helper
   const syncState = (newWallets: Wallet[], newTxs: Transaction[], newCats?: Category[]) => {
+    markPending('wallets', 'transactions', ...(newCats ? (['categories'] as SyncKey[]) : []));
     const catsToUse = newCats || categories;
     const recalculated = recalculateWalletBalances(newWallets, newTxs, catsToUse);
     setWallets(recalculated.wallets);
@@ -425,6 +497,7 @@ export const WalletProvider: React.FC<{ children: React.ReactNode; syncEnabled?:
       id: newId('c'),
     };
     const newCats = [...categories, newCat];
+    markPending('categories');
     setCategories(newCats);
     saveCategories(newCats);
     return newCat;
@@ -432,12 +505,14 @@ export const WalletProvider: React.FC<{ children: React.ReactNode; syncEnabled?:
 
   const updateCategory = (id: string, updates: Partial<Category>) => {
     const newCats = categories.map((c) => (c.id === id ? { ...c, ...updates } : c));
+    markPending('categories');
     setCategories(newCats);
     saveCategories(newCats);
   };
 
   const deleteCategory = (id: string) => {
     const newCats = categories.filter((c) => c.id !== id);
+    markPending('categories');
     setCategories(newCats);
     saveCategories(newCats);
   };
@@ -459,6 +534,7 @@ export const WalletProvider: React.FC<{ children: React.ReactNode; syncEnabled?:
 
   const updateAiSettings = (newSettings: Partial<AiSettings>) => {
     const merged = { ...aiSettings, ...newSettings };
+    markPending('preferences');
     setAiSettingsState(merged);
     saveStoredAiSettings(merged);
   };
@@ -466,6 +542,7 @@ export const WalletProvider: React.FC<{ children: React.ReactNode; syncEnabled?:
   const resetAllData = () => {
     localStorage.clear();
     clearStoredAiKeys();
+    markPending(...ALL_KEYS);
     const data = initializeStorageIfNeeded();
     setWallets(data.wallets);
     setCategories(data.categories);

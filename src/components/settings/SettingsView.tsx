@@ -1,5 +1,7 @@
-import React, { useState } from 'react';
-import { Moon, Sun, Monitor, Download, RotateCcw, Eye, EyeOff, LogOut, Cloud, KeyRound } from 'lucide-react';
+import React, { useEffect, useState } from 'react';
+import { Moon, Sun, Monitor, Download, RotateCcw, Eye, EyeOff, LogOut, Cloud, KeyRound, Fingerprint, Trash2 } from 'lucide-react';
+import { passkeyApi, passkeysSupported, type PasskeyInfo } from '../../services/api';
+import { formatDate } from '../../utils/formatters';
 import { useAuth } from '../../context/AuthContext';
 import { ChangePasswordForm } from '../auth/AuthScreens';
 import type { SyncStatus } from '../../context/WalletContext';
@@ -90,6 +92,90 @@ const SYNC_LABEL: Record<SyncStatus, { text: string; tone: string }> = {
   offline: { text: 'Ngoại tuyến, chỉ lưu trên máy này', tone: 'text-warn' },
 };
 
+/** Passkeys on this account: add one for this device, see and remove the others */
+const PasskeySection: React.FC = () => {
+  const [list, setList] = useState<PasskeyInfo[] | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [message, setMessage] = useState<Status>(null);
+
+  const refresh = () =>
+    passkeyApi
+      .list()
+      .then(({ passkeys }) => setList(passkeys))
+      .catch(() => setList([]));
+
+  useEffect(() => {
+    void refresh();
+  }, []);
+
+  if (!passkeysSupported()) return null;
+
+  const add = async () => {
+    setBusy(true);
+    setMessage(null);
+    try {
+      const device = /iphone|ipad/i.test(navigator.userAgent)
+        ? 'iPhone / iPad'
+        : /android/i.test(navigator.userAgent)
+          ? 'Android'
+          : /mac/i.test(navigator.userAgent)
+            ? 'Mac'
+            : /windows/i.test(navigator.userAgent)
+              ? 'Windows'
+              : 'Thiết bị này';
+      await passkeyApi.register(device);
+      setMessage({ tone: 'ok', text: 'Đã thêm. Lần sau đăng nhập bằng vân tay / Face ID.' });
+      await refresh();
+    } catch (err) {
+      const name = err instanceof Error ? err.name : '';
+      if (name === 'InvalidStateError') setMessage({ tone: 'info', text: 'Thiết bị này đã có passkey.' });
+      else if (name !== 'NotAllowedError' && name !== 'AbortError')
+        setMessage({ tone: 'error', text: err instanceof Error ? err.message : 'Không thêm được passkey.' });
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const remove = async (id: string) => {
+    await passkeyApi.remove(id).catch(() => undefined);
+    await refresh();
+  };
+
+  return (
+    <div className="mt-4 border-t border-rule pt-4 space-y-3">
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <p className="text-sm font-semibold text-ink">Vân tay / Face ID</p>
+        <Button variant="outline" size="sm" onClick={add} isLoading={busy}>
+          {!busy && <Fingerprint className="w-4 h-4" aria-hidden="true" />}
+          <span>Thêm cho máy này</span>
+        </Button>
+      </div>
+      {list && list.length > 0 && (
+        <ul className="divide-y divide-rule rounded-control border border-rule">
+          {list.map((p) => (
+            <li key={p.id} className="flex items-center gap-3 px-3 py-2">
+              <Fingerprint className="w-4 h-4 shrink-0 text-muted" aria-hidden="true" />
+              <div className="min-w-0 flex-1">
+                <p className="truncate text-sm font-semibold text-ink">{p.name || 'Passkey'}</p>
+                <p className="figure text-xs text-muted">Thêm ngày {formatDate(new Date(p.createdAt * 1000))}</p>
+              </div>
+              <button
+                type="button"
+                onClick={() => void remove(p.id)}
+                aria-label={`Xóa passkey ${p.name || ''}`}
+                className="grid h-9 w-9 place-items-center rounded-control text-muted hover:bg-expense-soft hover:text-expense transition-colors"
+              >
+                <Trash2 className="w-4 h-4" aria-hidden="true" />
+              </button>
+            </li>
+          ))}
+        </ul>
+      )}
+      <StatusLine status={message} />
+    </div>
+  );
+};
+
 const AccountCard: React.FC = () => {
   const { user, logout } = useAuth();
   const { syncStatus } = useWallet();
@@ -137,6 +223,7 @@ const AccountCard: React.FC = () => {
           )}
         </div>
       )}
+      {user && <PasskeySection />}
     </Card>
   );
 };

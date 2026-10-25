@@ -3,6 +3,7 @@ import { MotionConfig } from 'framer-motion';
 import { ThemeProvider } from './context/ThemeContext';
 import { WalletProvider, useWallet } from './context/WalletContext';
 import { AuthProvider, useAuth } from './context/AuthContext';
+import { ToastProvider } from './components/ui/Toast';
 import { LoginScreen, FirstPasswordScreen, OfflineNotice } from './components/auth/AuthScreens';
 import { AppLayout } from './components/layout/AppLayout';
 import {
@@ -21,6 +22,8 @@ const loadAnalytics = () =>
   import('./components/analytics/AnalyticsView').then((m) => ({ default: m.AnalyticsView }));
 const loadSettings = () =>
   import('./components/settings/SettingsView').then((m) => ({ default: m.SettingsView }));
+const loadTransactions = () =>
+  import('./components/transactions/AllTransactionsView').then((m) => ({ default: m.AllTransactionsView }));
 const loadAssistant = () =>
   import('./components/assistant/AiAssistantSheet').then((m) => ({ default: m.AiAssistantSheet }));
 
@@ -29,6 +32,7 @@ const BentoDashboard = lazy(loadDashboard);
 const MonthlyCalendar = lazy(loadCalendar);
 const AnalyticsView = lazy(loadAnalytics);
 const SettingsView = lazy(loadSettings);
+const AllTransactionsView = lazy(loadTransactions);
 const AiAssistantSheet = lazy(loadAssistant);
 
 const AppContent: React.FC = () => {
@@ -45,6 +49,7 @@ const AppContent: React.FC = () => {
       void loadCalendar();
       void loadAnalytics();
       void loadSettings();
+      void loadTransactions();
       void loadAssistant();
     };
     if (typeof window.requestIdleCallback === 'function') {
@@ -75,6 +80,12 @@ const AppContent: React.FC = () => {
       {activeTab === 'settings' && (
         <Suspense fallback={<SettingsSkeleton />}>
           {isReady ? <SettingsView /> : <SettingsSkeleton />}
+        </Suspense>
+      )}
+
+      {activeTab === 'transactions' && (
+        <Suspense fallback={<AnalyticsSkeleton />}>
+          {isReady ? <AllTransactionsView /> : <AnalyticsSkeleton />}
         </Suspense>
       )}
 
@@ -116,7 +127,9 @@ export function App() {
     <MotionConfig reducedMotion="user">
       <ThemeProvider>
         <AuthProvider>
-          <AuthGate />
+          <ToastProvider>
+            <AuthGate />
+          </ToastProvider>
         </AuthProvider>
       </ThemeProvider>
     </MotionConfig>

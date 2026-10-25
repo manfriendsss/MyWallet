@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
-import { Eye, EyeOff, LogIn, KeyRound, WifiOff } from 'lucide-react';
+import { Eye, EyeOff, LogIn, KeyRound, WifiOff, Fingerprint } from 'lucide-react';
+import { passkeysSupported } from '../../services/api';
 import { useAuth } from '../../context/AuthContext';
 import { Button } from '../ui/Button';
 import { cn } from '../../utils/cn';
@@ -71,7 +72,24 @@ const ErrorLine: React.FC<{ message: string | null }> = ({ message }) => (
 );
 
 export const LoginScreen: React.FC = () => {
-  const { login } = useAuth();
+  const { login, loginWithPasskey } = useAuth();
+  const [passkeyBusy, setPasskeyBusy] = useState(false);
+
+  const signInWithPasskey = async () => {
+    setPasskeyBusy(true);
+    setError(null);
+    try {
+      await loginWithPasskey();
+    } catch (err) {
+      // The person closing the system prompt is not an error worth shouting about
+      const name = err instanceof Error ? err.name : '';
+      if (name !== 'NotAllowedError' && name !== 'AbortError') {
+        setError(err instanceof Error ? err.message : 'Không đăng nhập được bằng passkey.');
+      }
+    } finally {
+      setPasskeyBusy(false);
+    }
+  };
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState<string | null>(null);
@@ -125,6 +143,12 @@ export const LoginScreen: React.FC = () => {
           {!busy && <LogIn className="h-4 w-4" aria-hidden="true" />}
           <span>Đăng nhập</span>
         </Button>
+        {passkeysSupported() && (
+          <Button variant="outline" onClick={signInWithPasskey} isLoading={passkeyBusy} className="w-full">
+            {!passkeyBusy && <Fingerprint className="h-4 w-4" aria-hidden="true" />}
+            <span>Vân tay / Face ID</span>
+          </Button>
+        )}
         <p className="text-center text-xs text-muted">Thiết bị này sẽ nhớ đăng nhập trong 180 ngày.</p>
       </form>
     </AuthFrame>

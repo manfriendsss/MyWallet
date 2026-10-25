@@ -16,8 +16,21 @@ export interface D1Database {
   batch(statements: D1PreparedStatement[]): Promise<unknown[]>;
 }
 
+export interface R2Object {
+  body: ReadableStream;
+  httpMetadata?: { contentType?: string };
+  size: number;
+}
+
+export interface R2Bucket {
+  put(key: string, value: ArrayBuffer, options?: { httpMetadata?: { contentType?: string } }): Promise<unknown>;
+  get(key: string): Promise<R2Object | null>;
+  delete(key: string): Promise<void>;
+}
+
 export interface Env {
   DB: D1Database;
+  RECEIPTS: R2Bucket;
   GEMINI_API_KEY?: string;
   DEEPSEEK_API_KEY?: string;
 }

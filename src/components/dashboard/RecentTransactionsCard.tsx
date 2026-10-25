@@ -7,6 +7,9 @@ import { Button } from '../ui/Button';
 import { TransactionRow } from './TransactionRow';
 import { CARD_ART } from '../../assets/cards';
 import { ToneTabs, type ToneTab } from '../ui/ToneTabs';
+import type { Transaction } from '../../types';
+import { TransactionFormModal } from '../transactions/TransactionForm';
+import { useToast } from '../ui/Toast';
 
 type Filter = 'all' | 'income' | 'expense';
 
@@ -22,8 +25,27 @@ const transactionListVariants: Variants = {
 };
 
 export const RecentTransactionsCard: React.FC = () => {
-  const { transactions, categories, wallets, deleteTransaction, openAssistant } = useWallet();
+  const {
+    transactions,
+    categories,
+    wallets,
+    deleteTransaction,
+    restoreTransactions,
+    openAssistant,
+    setActiveTab,
+  } = useWallet();
+  const { showToast } = useToast();
   const [filter, setFilter] = useState<Filter>('all');
+  const [editing, setEditing] = useState<Transaction | null>(null);
+
+  const handleDelete = (id: string) => {
+    const removed = deleteTransaction(id);
+    showToast({
+      message: 'Đã xóa giao dịch',
+      actionLabel: 'Hoàn tác',
+      onAction: () => restoreTransactions(removed),
+    });
+  };
 
   const filteredTransactions = transactions
     .filter((tx) => {
@@ -34,51 +56,64 @@ export const RecentTransactionsCard: React.FC = () => {
     .slice(0, 10);
 
   return (
-    <Card aria-labelledby="recent-heading" className="flex flex-col">
-      <CardHeader
-        id="recent-heading"
-        title="Giao dịch gần đây"
-        art={CARD_ART.receipt}
+    <>
+      <Card aria-labelledby="recent-heading" className="flex flex-col">
+        <CardHeader
+          id="recent-heading"
+          title="Giao dịch gần đây"
+          art={CARD_ART.receipt}
+          action={(
+            <Button variant="ghost" size="sm" onClick={() => setActiveTab('transactions')}>
+              Xem tất cả
+            </Button>
+          )}
+        />
+
+        {/* Full-width filter: the active pill flows to the chosen tab and takes its colour */}
+        <ToneTabs tabs={FILTERS} value={filter} onChange={setFilter} label="Lọc giao dịch" className="mb-4" />
+
+        {filteredTransactions.length === 0 ? (
+          <div className="flex flex-1 flex-col items-center justify-center border-t border-rule py-12 text-center">
+            <ReceiptText className="w-6 h-6 text-muted" strokeWidth={1.5} aria-hidden="true" />
+            <p className="mt-3 text-sm font-semibold text-ink">
+              {filter === 'all' ? 'Chưa có giao dịch nào' : 'Không có giao dịch phù hợp'}
+            </p>
+            <p className="mt-1 max-w-xs text-sm text-muted">
+              Nói, gõ hoặc chụp hóa đơn, trợ lý sẽ ghi vào đúng mục.
+            </p>
+            <Button variant="outline" size="sm" onClick={openAssistant} className="mt-4">
+              <Plus className="w-4 h-4" aria-hidden="true" />
+              <span>Thêm giao dịch</span>
+            </Button>
+          </div>
+        ) : (
+          <motion.ul
+            key={filter}
+            className="divide-y divide-rule border-t border-rule"
+            variants={transactionListVariants}
+            initial="hidden"
+            animate="show"
+          >
+            {filteredTransactions.map((tx, index) => (
+              <TransactionRow
+                key={tx.id}
+                index={index}
+                tx={tx}
+                category={categories.find((c) => c.id === tx.categoryId)}
+                wallet={wallets.find((w) => w.id === tx.walletId)}
+                toWallet={tx.toWalletId ? wallets.find((w) => w.id === tx.toWalletId) : undefined}
+                onEdit={setEditing}
+                onDelete={handleDelete}
+              />
+            ))}
+          </motion.ul>
+        )}
+      </Card>
+      <TransactionFormModal
+        isOpen={editing !== null}
+        onClose={() => setEditing(null)}
+        transaction={editing ?? undefined}
       />
-
-      {/* Full-width filter: the active pill flows to the chosen tab and takes its colour */}
-      <ToneTabs tabs={FILTERS} value={filter} onChange={setFilter} label="Lọc giao dịch" className="mb-4" />
-
-      {filteredTransactions.length === 0 ? (
-        <div className="flex flex-1 flex-col items-center justify-center border-t border-rule py-12 text-center">
-          <ReceiptText className="w-6 h-6 text-muted" strokeWidth={1.5} aria-hidden="true" />
-          <p className="mt-3 text-sm font-semibold text-ink">
-            {filter === 'all' ? 'Chưa có giao dịch nào' : 'Không có giao dịch phù hợp'}
-          </p>
-          <p className="mt-1 max-w-xs text-sm text-muted">
-            Nói, gõ hoặc chụp hóa đơn, trợ lý sẽ ghi vào đúng mục.
-          </p>
-          <Button variant="outline" size="sm" onClick={openAssistant} className="mt-4">
-            <Plus className="w-4 h-4" aria-hidden="true" />
-            <span>Thêm giao dịch</span>
-          </Button>
-        </div>
-      ) : (
-        <motion.ul
-          key={filter}
-          className="divide-y divide-rule border-t border-rule"
-          variants={transactionListVariants}
-          initial="hidden"
-          animate="show"
-        >
-          {filteredTransactions.map((tx, index) => (
-            <TransactionRow
-              key={tx.id}
-              index={index}
-              tx={tx}
-              category={categories.find((c) => c.id === tx.categoryId)}
-              wallet={wallets.find((w) => w.id === tx.walletId)}
-              toWallet={tx.toWalletId ? wallets.find((w) => w.id === tx.toWalletId) : undefined}
-              onDelete={deleteTransaction}
-            />
-          ))}
-        </motion.ul>
-      )}
-    </Card>
+    </>
   );
 };

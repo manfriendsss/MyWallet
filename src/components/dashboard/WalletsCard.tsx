@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import {
   ArrowLeftRight,
   Banknote,
@@ -26,6 +26,7 @@ import { convertForWallet, getCurrencyOptions } from '../../services/currency';
 import { Select } from '../ui/Select';
 import { CARD_ART } from '../../assets/cards';
 import { cn } from '../../utils/cn';
+import { toLocalISODate } from '../../utils/date';
 
 const WALLET_ICONS: Record<string, React.ElementType> = {
   Wallet: WalletIcon,
@@ -85,7 +86,16 @@ const IconPicker: React.FC<{ value: string; onChange: (id: string) => void }> = 
 );
 
 export const WalletsCard: React.FC = () => {
-  const { wallets, transactions, addWallet, updateWallet, deleteWallet, addTransfer, exchangeRates } = useWallet();
+  const {
+    wallets,
+    transactions,
+    addWallet,
+    updateWallet,
+    deleteWallet,
+    addTransfer,
+    previewTransferAmount,
+    exchangeRates,
+  } = useWallet();
 
   // State for Add Wallet Modal
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
@@ -97,6 +107,17 @@ export const WalletsCard: React.FC = () => {
   const [color, setColor] = useState('#f97316');
   const [icon, setIcon] = useState('Wallet');
 
+  // State for transfers between the owner's wallets
+  const [isTransferModalOpen, setIsTransferModalOpen] = useState(false);
+  const [transferFrom, setTransferFrom] = useState('');
+  const [transferTo, setTransferTo] = useState('');
+  const [transferAmount, setTransferAmount] = useState('');
+  const [transferReceived, setTransferReceived] = useState('');
+  const [receivedEdited, setReceivedEdited] = useState(false);
+  const [transferFee, setTransferFee] = useState('');
+  const [transferDate, setTransferDate] = useState(toLocalISODate());
+  const [transferNote, setTransferNote] = useState('');
+
   // State for Edit Wallet Modal: name, opening balance, icon and colour
   const [editingWallet, setEditingWallet] = useState<Wallet | null>(null);
   const [editName, setEditName] = useState('');
@@ -104,6 +125,61 @@ export const WalletsCard: React.FC = () => {
   const [editIcon, setEditIcon] = useState('Wallet');
   const [editColor, setEditColor] = useState('#f97316');
   const [confirmingDelete, setConfirmingDelete] = useState(false);
+
+  const transferSource = wallets.find((wallet) => wallet.id === transferFrom);
+  const transferDestination = wallets.find((wallet) => wallet.id === transferTo);
+
+  useEffect(() => {
+    if (receivedEdited) return;
+
+    const amount = parseFloat(transferAmount);
+    if (!transferFrom || !transferTo || !(amount > 0)) {
+      setTransferReceived('');
+      return;
+    }
+
+    setTransferReceived(String(previewTransferAmount(transferFrom, transferTo, amount)));
+  }, [previewTransferAmount, receivedEdited, transferAmount, transferFrom, transferTo]);
+
+  const resetTransferForm = () => {
+    const source = wallets.find((wallet) => wallet.kind !== 'credit') ?? wallets[0];
+    const destination = wallets.find((wallet) => wallet.id !== source?.id);
+    setTransferFrom(source?.id ?? '');
+    setTransferTo(destination?.id ?? '');
+    setTransferAmount('');
+    setTransferReceived('');
+    setReceivedEdited(false);
+    setTransferFee('');
+    setTransferDate(toLocalISODate());
+    setTransferNote('');
+  };
+
+  const openTransferModal = () => {
+    resetTransferForm();
+    setIsTransferModalOpen(true);
+  };
+
+  const closeTransferModal = () => {
+    setIsTransferModalOpen(false);
+    resetTransferForm();
+  };
+
+  const handleTransfer = (event: React.FormEvent) => {
+    event.preventDefault();
+    const amount = parseFloat(transferAmount);
+    const received = parseFloat(transferReceived);
+    const fee = parseFloat(transferFee);
+    if (!transferFrom || !transferTo || !(amount > 0)) return;
+
+    addTransfer(transferFrom, transferTo, amount, {
+      toAmount: received > 0 ? received : undefined,
+      fee: fee > 0 ? fee : undefined,
+      date: transferDate,
+      note: transferNote.trim() || undefined,
+    });
+    closeTransferModal();
+    navigator.vibrate?.(10);
+  };
 
   const handleCreateWallet = (e: React.FormEvent) => {
     e.preventDefault();
@@ -149,6 +225,7 @@ export const WalletsCard: React.FC = () => {
     setConfirmingDelete(false);
     setPayFrom(wallets.find((w) => w.kind !== 'credit' && w.id !== wallet.id)?.id ?? '');
     setPayAmount(isCard && wallet.currentBalance < 0 ? String(-wallet.currentBalance) : '');
+    setPayFee('');
   };
 
   const handleUpdateWallet = (e: React.FormEvent) => {
@@ -172,12 +249,14 @@ export const WalletsCard: React.FC = () => {
   // Paying off a card: a transfer from one of your other wallets
   const [payFrom, setPayFrom] = useState('');
   const [payAmount, setPayAmount] = useState('');
+  const [payFee, setPayFee] = useState('');
   const [editLimit, setEditLimit] = useState('');
   const payableFrom = wallets.filter((w) => w.kind !== 'credit' && w.id !== editingWallet?.id);
   const handlePayCard = () => {
     const amount = parseFloat(payAmount);
+    const fee = parseFloat(payFee);
     if (!editingWallet || !payFrom || !(amount > 0)) return;
-    addTransfer(payFrom, editingWallet.id, amount);
+    addTransfer(payFrom, editingWallet.id, amount, { fee: fee > 0 ? fee : undefined });
     setEditingWallet(null);
   };
 
@@ -193,7 +272,19 @@ export const WalletsCard: React.FC = () => {
 
   return (
     <Card aria-labelledby="wallets-heading" className="flex flex-col">
-      <CardHeader id="wallets-heading" title={`Nguồn tiền (${wallets.length})`} art={CARD_ART.wallets} />
+      <CardHeader
+        id="wallets-heading"
+        title={`Nguồn tiền (${wallets.length})`}
+        art={CARD_ART.wallets}
+        action={
+          wallets.length >= 2 ? (
+            <Button type="button" variant="outline" size="sm" onClick={openTransferModal}>
+              <ArrowLeftRight className="h-4 w-4" aria-hidden="true" />
+              <span>Chuyển tiền</span>
+            </Button>
+          ) : undefined
+        }
+      />
 
       <TileGrid label="Nguồn tiền">
         {wallets.map((wallet) => {
@@ -230,6 +321,168 @@ export const WalletsCard: React.FC = () => {
         })}
         <AddTile label="Thêm ví" onClick={() => setIsAddModalOpen(true)} />
       </TileGrid>
+
+      <Modal isOpen={isTransferModalOpen} onClose={closeTransferModal} title="Chuyển tiền">
+        <form onSubmit={handleTransfer} className="space-y-5">
+          <div>
+            <label htmlFor="transfer-from" className="label">
+              Từ ví
+            </label>
+            <Select
+              id="transfer-from"
+              value={transferFrom}
+              options={wallets.map((wallet) => ({
+                value: wallet.id,
+                label: wallet.name,
+                hint: formatCurrency(wallet.currentBalance, wallet.currency),
+              }))}
+              onChange={(value) => {
+                setTransferFrom(value);
+                setReceivedEdited(false);
+                if (value === transferTo) {
+                  setTransferTo(wallets.find((wallet) => wallet.id !== value)?.id ?? '');
+                }
+              }}
+              searchable
+            />
+          </div>
+
+          <div>
+            <label htmlFor="transfer-to" className="label">
+              Đến ví
+            </label>
+            <Select
+              id="transfer-to"
+              value={transferTo}
+              options={wallets
+                .filter((wallet) => wallet.id !== transferFrom)
+                .map((wallet) => ({
+                  value: wallet.id,
+                  label: wallet.name,
+                  hint: formatCurrency(wallet.currentBalance, wallet.currency),
+                }))}
+              onChange={(value) => {
+                setTransferTo(value);
+                setReceivedEdited(false);
+              }}
+              searchable
+            />
+          </div>
+
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+            <div>
+              <label htmlFor="transfer-amount" className="label">
+                Số tiền gửi ({transferSource?.currency ?? ''})
+              </label>
+              <input
+                id="transfer-amount"
+                name="transferAmount"
+                type="number"
+                inputMode="decimal"
+                step="any"
+                min={0}
+                value={transferAmount}
+                onChange={(event) => setTransferAmount(event.target.value)}
+                className="field figure"
+              />
+            </div>
+            <div>
+              <label htmlFor="transfer-received" className="label">
+                Số tiền nhận ({transferDestination?.currency ?? ''})
+              </label>
+              <input
+                id="transfer-received"
+                name="transferReceived"
+                type="number"
+                inputMode="decimal"
+                step="any"
+                min={0}
+                value={transferReceived}
+                onChange={(event) => {
+                  setTransferReceived(event.target.value);
+                  setReceivedEdited(true);
+                }}
+                className="field figure"
+              />
+            </div>
+          </div>
+
+          {transferSource &&
+            transferDestination &&
+            transferSource.currency !== transferDestination.currency &&
+            parseFloat(transferAmount) > 0 &&
+            parseFloat(transferReceived) > 0 && (
+              <p className="figure text-xs text-muted">
+                1 {transferSource.currency} ={' '}
+                {formatCurrency(
+                  parseFloat(transferReceived) / parseFloat(transferAmount),
+                  transferDestination.currency
+                )}
+              </p>
+            )}
+
+          <div>
+            <label htmlFor="transfer-fee" className="label">
+              Phí ({transferSource?.currency ?? ''})
+            </label>
+            <input
+              id="transfer-fee"
+              name="transferFee"
+              type="number"
+              inputMode="decimal"
+              step="any"
+              min={0}
+              placeholder="0"
+              value={transferFee}
+              onChange={(event) => setTransferFee(event.target.value)}
+              className="field figure"
+            />
+          </div>
+
+          <div>
+            <label htmlFor="transfer-date" className="label">
+              Ngày
+            </label>
+            <input
+              id="transfer-date"
+              name="transferDate"
+              type="date"
+              required
+              value={transferDate}
+              onChange={(event) => setTransferDate(event.target.value)}
+              className="field"
+            />
+          </div>
+
+          <div>
+            <label htmlFor="transfer-note" className="label">
+              Ghi chú
+            </label>
+            <input
+              id="transfer-note"
+              name="transferNote"
+              type="text"
+              value={transferNote}
+              onChange={(event) => setTransferNote(event.target.value)}
+              className="field"
+            />
+          </div>
+
+          <div className="flex gap-2 pt-2">
+            <Button type="button" variant="outline" onClick={closeTransferModal} className="flex-1">
+              Hủy
+            </Button>
+            <Button
+              type="submit"
+              variant="primary"
+              disabled={!transferFrom || !transferTo || !(parseFloat(transferAmount) > 0)}
+              className="flex-1"
+            >
+              Chuyển
+            </Button>
+          </div>
+        </form>
+      </Modal>
 
       {/* Modal: Thêm nguồn tiền mới */}
       <Modal
@@ -332,7 +585,7 @@ export const WalletsCard: React.FC = () => {
           <Swatches label="Màu nhận diện" colors={COLOR_OPTIONS} value={color} onChange={setColor} />
 
           <div className="flex gap-2 pt-2">
-            <Button variant="outline" onClick={() => setIsAddModalOpen(false)} className="flex-1">
+            <Button type="button" variant="outline" onClick={() => setIsAddModalOpen(false)} className="flex-1">
               Hủy
             </Button>
             <Button type="submit" variant="primary" className="flex-1">
@@ -408,7 +661,7 @@ export const WalletsCard: React.FC = () => {
           <Swatches label="Màu nhận diện" colors={COLOR_OPTIONS} value={editColor} onChange={setEditColor} />
 
           <div className="flex gap-2">
-            <Button variant="outline" onClick={() => setEditingWallet(null)} className="flex-1">
+            <Button type="button" variant="outline" onClick={() => setEditingWallet(null)} className="flex-1">
               Hủy
             </Button>
             <Button type="submit" variant="primary" className="flex-1">
@@ -433,7 +686,7 @@ export const WalletsCard: React.FC = () => {
                 <p className="text-sm text-muted">Thêm một ví tiền hoặc tài khoản ngân hàng để trả nợ từ đó.</p>
               ) : (
                 <>
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                     <div>
                       <label htmlFor="pay-from" className="label">
                         Trả từ
@@ -465,8 +718,26 @@ export const WalletsCard: React.FC = () => {
                         className="field figure"
                       />
                     </div>
+                    <div>
+                      <label htmlFor="pay-fee" className="label">
+                        Phí ({wallets.find((w) => w.id === payFrom)?.currency ?? editingWallet.currency})
+                      </label>
+                      <input
+                        id="pay-fee"
+                        name="payFee"
+                        type="number"
+                        inputMode="decimal"
+                        step="any"
+                        min={0}
+                        placeholder="0"
+                        value={payFee}
+                        onChange={(e) => setPayFee(e.target.value)}
+                        className="field figure"
+                      />
+                    </div>
                   </div>
                   <Button
+                    type="button"
                     variant="primary"
                     onClick={handlePayCard}
                     disabled={!payFrom || !(parseFloat(payAmount) > 0)}
@@ -489,17 +760,17 @@ export const WalletsCard: React.FC = () => {
                   {editingTxCount > 0 ? ` và ${editingTxCount} giao dịch của ví này` : ''}? Không thể hoàn tác.
                 </p>
                 <div className="flex gap-2">
-                  <Button variant="outline" onClick={() => setConfirmingDelete(false)} className="flex-1">
+                  <Button type="button" variant="outline" onClick={() => setConfirmingDelete(false)} className="flex-1">
                     Giữ lại
                   </Button>
-                  <Button variant="danger" onClick={handleDelete} className="flex-1">
+                  <Button type="button" variant="danger" onClick={handleDelete} className="flex-1">
                     <Trash2 className="w-4 h-4" aria-hidden="true" />
                     <span>Xóa hẳn</span>
                   </Button>
                 </div>
               </div>
             ) : (
-              <Button variant="danger" onClick={() => setConfirmingDelete(true)} className="w-full">
+              <Button type="button" variant="danger" onClick={() => setConfirmingDelete(true)} className="w-full">
                 <Trash2 className="w-4 h-4" aria-hidden="true" />
                 <span>Xóa nguồn tiền</span>
               </Button>
