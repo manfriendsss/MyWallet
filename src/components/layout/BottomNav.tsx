@@ -1,116 +1,110 @@
-import React from 'react';
-import { LayoutDashboard, CalendarDays, Plus, BarChart3, Settings } from 'lucide-react';
-import { motion } from 'framer-motion';
+import React, { useLayoutEffect, useRef, useState } from 'react';
+import { Plus } from 'lucide-react';
 import { useWallet } from '../../context/WalletContext';
-import type { ActiveTab } from '../../types';
 import { cn } from '../../utils/cn';
+import { NAV_ITEMS } from './navItems';
+
+// Geometry of the notch, in px. The + button sits on a circle concentric with the notch.
+const BUTTON_R = 28; // 56px button
+const GAP = 6; // even ring of air between button and bar
+const NOTCH_R = BUTTON_R + GAP;
+const CENTER_Y = 4; // button centre, measured down from the bar's top edge
+const FILLET = 12; // rounds the corner where the notch meets the top edge
+const CORNER = 24; // bar's top-left and top-right radius
+
+/** Outline of the bar: rounded top corners, a round notch with filleted shoulders */
+function barPath(w: number, h: number): string {
+  const cx = w / 2;
+  // Fillet circle: tangent to the top edge and to the notch circle from outside
+  const fx = Math.sqrt((NOTCH_R + FILLET) ** 2 - (FILLET - CENTER_Y) ** 2);
+  const k = NOTCH_R / (NOTCH_R + FILLET);
+  const tx = fx * k; // tangent point, horizontal offset from centre
+  const ty = CENTER_Y + (FILLET - CENTER_Y) * k;
+  const largeArc = ty < CENTER_Y ? 1 : 0;
+
+  return [
+    `M0 ${h}`,
+    `L0 ${CORNER}`,
+    `A${CORNER} ${CORNER} 0 0 1 ${CORNER} 0`,
+    `L${cx - fx} 0`,
+    `A${FILLET} ${FILLET} 0 0 1 ${cx - tx} ${ty}`,
+    `A${NOTCH_R} ${NOTCH_R} 0 ${largeArc} 0 ${cx + tx} ${ty}`,
+    `A${FILLET} ${FILLET} 0 0 1 ${cx + fx} 0`,
+    `L${w - CORNER} 0`,
+    `A${CORNER} ${CORNER} 0 0 1 ${w} ${CORNER}`,
+    `L${w} ${h}`,
+    'Z',
+  ].join(' ');
+}
 
 export const BottomNav: React.FC = () => {
   const { activeTab, setActiveTab, openAssistant } = useWallet();
+  const barRef = useRef<HTMLDivElement>(null);
+  const [size, setSize] = useState({ w: 0, h: 0 });
 
-  const navItems: Array<{ id: ActiveTab; label: string; icon: React.ElementType }> = [
-    { id: 'dashboard', label: 'Trang chủ', icon: LayoutDashboard },
-    { id: 'calendar', label: 'Lịch', icon: CalendarDays },
-    { id: 'analytics', label: 'Thống kê', icon: BarChart3 },
-    { id: 'settings', label: 'Cài đặt', icon: Settings },
-  ];
+  useLayoutEffect(() => {
+    const el = barRef.current;
+    if (!el) return;
+    const measure = () => setSize({ w: el.offsetWidth, h: el.offsetHeight });
+    measure();
+    const ro = new ResizeObserver(measure);
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, []);
+
+  const renderItem = (item: (typeof NAV_ITEMS)[number]) => {
+    const isActive = activeTab === item.id;
+    const Icon = item.icon;
+    return (
+      <li key={item.id} className="flex-1">
+        <button
+          type="button"
+          onClick={() => setActiveTab(item.id)}
+          aria-current={isActive ? 'page' : undefined}
+          className={cn(
+            'flex h-16 w-full flex-col items-center justify-center gap-1 text-xs font-semibold transition-colors',
+            isActive ? 'text-accent' : 'text-muted hover:text-ink'
+          )}
+        >
+          <Icon className="w-5 h-5" aria-hidden="true" />
+          <span>{item.label}</span>
+        </button>
+      </li>
+    );
+  };
 
   return (
-    <div className="md:hidden fixed bottom-0 left-0 right-0 z-40 px-3 pb-safe pt-1">
-      <div className="relative flex items-center justify-around h-16 bg-white/90 dark:bg-[#0f131f]/90 backdrop-blur-2xl border border-neutral-200/80 dark:border-white/10 rounded-3xl shadow-2xl shadow-black/20 px-2 mb-2">
-        {/* Item 1: Trang chủ */}
-        <button
-          onClick={() => setActiveTab(navItems[0].id)}
-          className={cn(
-            'flex flex-col items-center justify-center flex-1 py-1 transition-all duration-200 relative',
-            activeTab === navItems[0].id
-              ? 'text-emerald-600 dark:text-emerald-400 font-semibold'
-              : 'text-neutral-500 dark:text-neutral-400 hover:text-neutral-800 dark:hover:text-neutral-200'
-          )}
-        >
-          {React.createElement(navItems[0].icon, { className: 'w-5 h-5' })}
-          <span className="text-[11px] mt-1">{navItems[0].label}</span>
-          {activeTab === navItems[0].id && (
-            <motion.div
-              layoutId="activeTabIndicatorMobile"
-              className="absolute -bottom-1 w-1.5 h-1.5 rounded-full bg-emerald-500"
-            />
-          )}
-        </button>
-
-        {/* Item 2: Lịch */}
-        <button
-          onClick={() => setActiveTab(navItems[1].id)}
-          className={cn(
-            'flex flex-col items-center justify-center flex-1 py-1 transition-all duration-200 relative',
-            activeTab === navItems[1].id
-              ? 'text-emerald-600 dark:text-emerald-400 font-semibold'
-              : 'text-neutral-500 dark:text-neutral-400 hover:text-neutral-800 dark:hover:text-neutral-200'
-          )}
-        >
-          {React.createElement(navItems[1].icon, { className: 'w-5 h-5' })}
-          <span className="text-[11px] mt-1">{navItems[1].label}</span>
-          {activeTab === navItems[1].id && (
-            <motion.div
-              layoutId="activeTabIndicatorMobile"
-              className="absolute -bottom-1 w-1.5 h-1.5 rounded-full bg-emerald-500"
-            />
-          )}
-        </button>
-
-        {/* CENTER BUTTON: (+) TRỢ LÝ AI */}
-        <div className="flex-1 flex justify-center -mt-6">
-          <motion.button
-            whileTap={{ scale: 0.9 }}
-            whileHover={{ scale: 1.05 }}
-            onClick={openAssistant}
-            className="w-14 h-14 rounded-full bg-gradient-to-tr from-emerald-500 via-teal-500 to-indigo-600 text-white flex items-center justify-center shadow-lg shadow-emerald-500/35 border-4 border-neutral-50 dark:border-[#0a0d14] cursor-pointer"
-            aria-label="Mở Trợ lý Chi tiêu AI"
+    <nav aria-label="Điều hướng chính" className="md:hidden fixed bottom-0 inset-x-0 z-[300]">
+      <div ref={barRef} className="relative pb-safe">
+        {size.w > 0 && (
+          <svg
+            aria-hidden="true"
+            className="bottom-bar-shape absolute inset-0 h-full w-full overflow-visible"
+            width={size.w}
+            height={size.h}
+            viewBox={`0 0 ${size.w} ${size.h}`}
           >
-            <Plus className="w-7 h-7 stroke-[2.5]" />
-          </motion.button>
-        </div>
+            <path d={barPath(size.w, size.h + 1)} />
+          </svg>
+        )}
 
-        {/* Item 3: Thống kê */}
-        <button
-          onClick={() => setActiveTab(navItems[2].id)}
-          className={cn(
-            'flex flex-col items-center justify-center flex-1 py-1 transition-all duration-200 relative',
-            activeTab === navItems[2].id
-              ? 'text-emerald-600 dark:text-emerald-400 font-semibold'
-              : 'text-neutral-500 dark:text-neutral-400 hover:text-neutral-800 dark:hover:text-neutral-200'
-          )}
-        >
-          {React.createElement(navItems[2].icon, { className: 'w-5 h-5' })}
-          <span className="text-[11px] mt-1">{navItems[2].label}</span>
-          {activeTab === navItems[2].id && (
-            <motion.div
-              layoutId="activeTabIndicatorMobile"
-              className="absolute -bottom-1 w-1.5 h-1.5 rounded-full bg-emerald-500"
-            />
-          )}
-        </button>
-
-        {/* Item 4: Cài đặt */}
-        <button
-          onClick={() => setActiveTab(navItems[3].id)}
-          className={cn(
-            'flex flex-col items-center justify-center flex-1 py-1 transition-all duration-200 relative',
-            activeTab === navItems[3].id
-              ? 'text-emerald-600 dark:text-emerald-400 font-semibold'
-              : 'text-neutral-500 dark:text-neutral-400 hover:text-neutral-800 dark:hover:text-neutral-200'
-          )}
-        >
-          {React.createElement(navItems[3].icon, { className: 'w-5 h-5' })}
-          <span className="text-[11px] mt-1">{navItems[3].label}</span>
-          {activeTab === navItems[3].id && (
-            <motion.div
-              layoutId="activeTabIndicatorMobile"
-              className="absolute -bottom-1 w-1.5 h-1.5 rounded-full bg-emerald-500"
-            />
-          )}
-        </button>
+        <ul className="relative mx-auto flex max-w-md items-center px-2">
+          {NAV_ITEMS.slice(0, 2).map(renderItem)}
+          <li className="w-20 shrink-0" aria-hidden="true" />
+          {NAV_ITEMS.slice(2).map(renderItem)}
+        </ul>
       </div>
-    </div>
+
+      {/* Primary action: add a transaction through the assistant */}
+      <button
+        type="button"
+        onClick={openAssistant}
+        style={{ top: CENTER_Y - BUTTON_R }}
+        className="absolute left-1/2 grid h-14 w-14 -translate-x-1/2 place-items-center rounded-full bg-[image:var(--gradient-accent)] text-accent-ink shadow-[0_8px_18px_-8px_var(--color-glow-1),0_3px_8px_-3px_oklch(40%_0.12_45/0.45)] transition-transform active:scale-95"
+        aria-label="Thêm giao dịch"
+      >
+        <Plus className="w-7 h-7" strokeWidth={2.5} aria-hidden="true" />
+      </button>
+    </nav>
   );
 };

@@ -1,24 +1,17 @@
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useRef, useEffect, useId } from 'react';
+import { createPortal } from 'react-dom';
 import { motion, AnimatePresence } from 'framer-motion';
-import {
-  Mic,
-  MicOff,
-  Send,
-  Image as ImageIcon,
-  Sparkles,
-  X,
-  Check,
-  Bot,
-  User,
-  AlertCircle,
-} from 'lucide-react';
+import { Mic, MicOff, Send, Camera, X, Check, AlertCircle } from 'lucide-react';
 import confetti from 'canvas-confetti';
 import { useWallet } from '../../context/WalletContext';
-import { compressImageToWebP } from '../../utils/imageCompressor';
+import { compressImageToWebP, ACCEPTED_IMAGE_TYPES } from '../../utils/imageCompressor';
 import { startSpeechRecognition, isSpeechRecognitionSupported } from '../../services/speech';
-import { callGeminiApi, callDeepSeekApi, parseTransactionLocally } from '../../services/ai';
+import { callGeminiApi, callDeepSeekApi, parseTransactionLocally, aiKeyFor } from '../../services/ai';
 import type { ParsedTransactionFromAi } from '../../types';
 import { formatCurrency } from '../../utils/formatters';
+import { toLocalISODate } from '../../utils/date';
+import { useDialog } from '../../utils/useDialog';
+import { cn } from '../../utils/cn';
 
 interface ChatMessage {
   id: string;
@@ -26,7 +19,11 @@ interface ChatMessage {
   text: string;
   imageUrl?: string;
   previewData?: ParsedTransactionFromAi;
+  isError?: boolean;
 }
+
+const iconButton =
+  'grid h-10 w-10 shrink-0 place-items-center rounded-control text-muted hover:bg-paper-3 hover:text-ink transition-colors disabled:opacity-55';
 
 export const AiAssistantSheet: React.FC = () => {
   const {
@@ -48,36 +45,55 @@ export const AiAssistantSheet: React.FC = () => {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const recognitionRef = useRef<any>(null);
+  const panelRef = useDialog(isAssistantOpen, closeAssistant);
+  const titleId = useId();
+
+  const hasCloudAi =
+    aiSettings.keySource === 'server' ||
+    (aiSettings.provider === 'gemini' && Boolean(aiSettings.geminiApiKey)) ||
+    (aiSettings.provider === 'deepseek' && Boolean(aiSettings.deepseekApiKey));
+  const geminiKey = aiKeyFor(aiSettings, 'gemini');
+  const deepseekKey = aiKeyFor(aiSettings, 'deepseek');
+  const canReadReceipts = Boolean(geminiKey);
 
   useEffect(() => {
-    if (isAssistantOpen && messages.length === 0) {
+    if (isAssistantOpen && messages.length === 0 && hasCloudAi) {
       setMessages([
         {
           id: 'welcome',
           sender: 'ai',
-          text: 'Xin chào! Hãy nói, gõ hoặc gửi ảnh hóa đơn. Tôi sẽ phân loại vào đúng mục và nguồn tiền cho bạn.',
+          text: 'Nói, gõ hoặc gửi ảnh hóa đơn. Tôi sẽ ghi vào đúng danh mục và nguồn tiền.',
         },
       ]);
     }
   }, [isAssistantOpen]);
 
   useEffect(() => {
-    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+    messagesEndRef.current?.scrollIntoView({ block: 'end' });
   }, [messages, currentPreview]);
+
+  // Stop the microphone whenever the sheet closes
+  useEffect(() => {
+    if (!isAssistantOpen && recognitionRef.current) {
+      recognitionRef.current.stop();
+      setIsListening(false);
+    }
+  }, [isAssistantOpen]);
+
+  const pushAi = (text: string, extra: Partial<ChatMessage> = {}) =>
+    setMessages((prev) => [...prev, { id: `ai-${Date.now()}`, sender: 'ai', text, ...extra }]);
 
   // Voice recording handler
   const handleToggleVoice = () => {
     if (isListening) {
-      if (recognitionRef.current) {
-        recognitionRef.current.stop();
-      }
+      recognitionRef.current?.stop();
       setIsListening(false);
       return;
     }
 
     if (!isSpeechRecognitionSupported()) {
-      setSpeechError('Trình duyệt chưa hỗ trợ nhận dạng giọng nói');
-      setTimeout(() => setSpeechError(null), 3000);
+      setSpeechError('Trình duyệt này chưa hỗ trợ nhận giọng nói. Hãy dùng Chrome hoặc Safari.');
+      setTimeout(() => setSpeechError(null), 4000);
       return;
     }
 
@@ -96,7 +112,7 @@ export const AiAssistantSheet: React.FC = () => {
       onError: (err) => {
         setSpeechError(err);
         setIsListening(false);
-        setTimeout(() => setSpeechError(null), 3500);
+        setTimeout(() => setSpeechError(null), 4000);
       },
       onEnd: () => {
         setIsListening(false);
@@ -111,66 +127,35 @@ export const AiAssistantSheet: React.FC = () => {
     const file = e.target.files?.[0];
     if (!file) return;
 
+    if (!canReadReceipts) {
+      // No key: say so plainly rather than inventing a transaction from the photo
+      pushAi('Đọc ảnh hóa đơn cần Gemini API key. Thêm key trong Cài đặt, hoặc gõ số tiền ở đây.', { isError: true });
+      if (fileInputRef.current) fileInputRef.current.value = '';
+      return;
+    }
+
     setIsProcessing(true);
     try {
-      // Compress to WebP quality 85%
       const compressed = await compressImageToWebP(file, 1600, 0.85);
 
-      const userMsg: ChatMessage = {
-        id: `msg-${Date.now()}`,
-        sender: 'user',
-        text: 'Hóa đơn chi tiêu mới',
-        imageUrl: compressed.dataUrl,
-      };
-      setMessages((prev) => [...prev, userMsg]);
-
-      // Call AI with multimodal image
-      if (aiSettings.provider === 'gemini' && aiSettings.geminiApiKey) {
-        const response = await callGeminiApi(
-          aiSettings.geminiApiKey,
-          aiSettings.geminiModel,
-          'Phân tích hóa đơn này và trích xuất giao dịch',
-          categories,
-          wallets,
-          compressed.dataUrl
-        );
-
-        if (response.data) {
-          setCurrentPreview(response.data);
-        }
-
-        setMessages((prev) => [
-          ...prev,
-          {
-            id: `ai-${Date.now()}`,
-            sender: 'ai',
-            text: response.message,
-            previewData: response.data,
-          },
-        ]);
-      } else {
-        // Fallback local simulation if no Gemini key
-        const local = parseTransactionLocally('Ăn uống hóa đơn 150k', categories, wallets);
-        setCurrentPreview(local.data);
-        setMessages((prev) => [
-          ...prev,
-          {
-            id: `ai-${Date.now()}`,
-            sender: 'ai',
-            text: `${local.message} (Lưu ý: Thêm Gemini API Key trong Cài đặt để AI đọc chi tiết toàn bộ hóa đơn).`,
-            previewData: local.data,
-          },
-        ]);
-      }
-    } catch (err: any) {
       setMessages((prev) => [
         ...prev,
-        {
-          id: `ai-${Date.now()}`,
-          sender: 'ai',
-          text: `Không thể đọc hóa đơn: ${err.message}`,
-        },
+        { id: `msg-${Date.now()}`, sender: 'user', text: 'Ảnh hóa đơn', imageUrl: compressed.dataUrl },
       ]);
+
+      const response = await callGeminiApi(
+        geminiKey,
+        aiSettings.geminiModel,
+        'Phân tích hóa đơn này và trích xuất giao dịch',
+        categories,
+        wallets,
+        compressed.dataUrl
+      );
+
+      if (response.data) setCurrentPreview(response.data);
+      pushAi(response.message, { previewData: response.data });
+    } catch (err) {
+      pushAi(`Không đọc được hóa đơn. ${err instanceof Error ? err.message : ''}`, { isError: true });
     } finally {
       setIsProcessing(false);
       if (fileInputRef.current) fileInputRef.current.value = '';
@@ -179,16 +164,11 @@ export const AiAssistantSheet: React.FC = () => {
 
   // Process text input (chat or speech)
   const handleProcessInput = async (textToSend?: string) => {
-    const raw = (textToSend || input).trim();
+    const raw = (textToSend || input).trim().slice(0, 500);
     if (!raw || isProcessing) return;
 
     setInput('');
-    const userMsg: ChatMessage = {
-      id: `msg-${Date.now()}`,
-      sender: 'user',
-      text: raw,
-    };
-    setMessages((prev) => [...prev, userMsg]);
+    setMessages((prev) => [...prev, { id: `msg-${Date.now()}`, sender: 'user', text: raw }]);
     setIsProcessing(true);
 
     try {
@@ -207,68 +187,40 @@ HÃY CẬP NHẬT LẠI VÀ CHỈ BÁO KẾT QUẢ NGẮN GỌN TRONG 1 CÂU THE
       let responseMessage = '';
       let parsedData: ParsedTransactionFromAi | undefined;
 
-      if (aiSettings.provider === 'gemini' && aiSettings.geminiApiKey) {
-        const res = await callGeminiApi(
-          aiSettings.geminiApiKey,
-          aiSettings.geminiModel,
-          promptToAi,
-          categories,
-          wallets
-        );
+      if (aiSettings.provider === 'gemini' && geminiKey) {
+        const res = await callGeminiApi(geminiKey, aiSettings.geminiModel, promptToAi, categories, wallets);
         responseMessage = res.message;
         parsedData = res.data;
-      } else if (aiSettings.provider === 'deepseek' && aiSettings.deepseekApiKey) {
-        const res = await callDeepSeekApi(
-          aiSettings.deepseekApiKey,
-          aiSettings.deepseekModel,
-          promptToAi,
-          categories,
-          wallets
-        );
+      } else if (aiSettings.provider === 'deepseek' && deepseekKey) {
+        const res = await callDeepSeekApi(deepseekKey, aiSettings.deepseekModel, promptToAi, categories, wallets);
         responseMessage = res.message;
         parsedData = res.data;
       } else {
         // Smart Local Parser
         const local = parseTransactionLocally(raw, categories, wallets);
         responseMessage = local.message;
-        parsedData = local.data;
+        parsedData = local.data.amount > 0 ? local.data : undefined;
       }
 
-      if (parsedData) {
-        setCurrentPreview(parsedData);
-      }
-
-      setMessages((prev) => [
-        ...prev,
-        {
-          id: `ai-${Date.now()}`,
-          sender: 'ai',
-          text: responseMessage,
-          previewData: parsedData,
-        },
-      ]);
-    } catch (err: any) {
-      setMessages((prev) => [
-        ...prev,
-        {
-          id: `ai-${Date.now()}`,
-          sender: 'ai',
-          text: `Lỗi xử lý: ${err.message}`,
-        },
-      ]);
+      if (parsedData) setCurrentPreview(parsedData);
+      pushAi(responseMessage, { previewData: parsedData });
+    } catch (err) {
+      pushAi(err instanceof Error ? err.message : 'Có lỗi khi xử lý. Thử lại.', { isError: true });
     } finally {
       setIsProcessing(false);
     }
   };
 
+  const canSave = Boolean(currentPreview && currentPreview.amount > 0 && wallets.length > 0 && categories.length > 0);
+
   // Confirm and Save transaction
   const handleConfirmSave = () => {
-    if (!currentPreview) return;
+    if (!currentPreview || !canSave) return;
 
     // Find category ID or match first
     const targetType = currentPreview.type;
     const cat =
-      categories.find((c) => c.name.toLowerCase() === currentPreview.categoryName.toLowerCase()) ||
+      categories.find((c) => c.type === targetType && c.name.toLowerCase() === currentPreview.categoryName.toLowerCase()) ||
       categories.find((c) => c.type === targetType) ||
       categories[0];
 
@@ -285,274 +237,248 @@ HÃY CẬP NHẬT LẠI VÀ CHỈ BÁO KẾT QUẢ NGẮN GỌN TRONG 1 CÂU THE
       walletId: wallet.id,
       categoryId: cat.id,
       note: currentPreview.note || cat.name,
-      date: currentPreview.date || new Date().toISOString().split('T')[0],
+      date: currentPreview.date || toLocalISODate(),
       time: new Date().toTimeString().slice(0, 5),
       isAiGenerated: true,
     });
 
-    // Confetti celebration
     confetti({
-      particleCount: 80,
-      spread: 60,
-      origin: { y: 0.7 },
-      colors: ['#10b981', '#3b82f6', '#8b5cf6', '#ec4899'],
+      particleCount: 60,
+      spread: 55,
+      origin: { y: 0.8 },
+      disableForReducedMotion: true,
     });
 
     setCurrentPreview(null);
+    setMessages([]);
     closeAssistant();
   };
 
-  if (!isAssistantOpen) return null;
-
-  return (
+  return createPortal(
     <AnimatePresence>
-      <div className="fixed inset-0 z-50 flex items-end justify-center p-0 sm:p-4">
-        {/* Backdrop */}
-        <motion.div
-          initial={{ opacity: 0 }}
-          animate={{ opacity: 1 }}
-          exit={{ opacity: 0 }}
-          onClick={closeAssistant}
-          className="fixed inset-0 bg-black/60 backdrop-blur-sm"
-        />
+      {isAssistantOpen && (
+        <div className="fixed inset-0 z-[400] flex items-end justify-center sm:items-center sm:p-4">
+          {/* Backdrop */}
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            transition={{ duration: 0.15 }}
+            onClick={closeAssistant}
+            aria-hidden="true"
+            className="fixed inset-0 bg-scrim"
+          />
 
-        {/* Bottom Sheet Drawer */}
-        <motion.div
-          initial={{ y: '100%' }}
-          animate={{ y: 0 }}
-          exit={{ y: '100%' }}
-          transition={{ type: 'spring', damping: 26, stiffness: 300 }}
-          className="relative w-full max-w-xl z-10 bg-white dark:bg-[#101422] rounded-t-[32px] sm:rounded-3xl border-t sm:border border-neutral-200 dark:border-white/10 shadow-2xl flex flex-col h-[88vh] sm:h-[80vh] overflow-hidden"
-        >
-          {/* Grab handle mobile */}
-          <div className="w-full flex justify-center pt-3 pb-1 sm:hidden">
-            <div className="w-12 h-1.5 bg-neutral-300 dark:bg-neutral-700 rounded-full" />
-          </div>
-
-          {/* Sheet Header */}
-          <div className="px-6 py-3.5 border-b border-neutral-100 dark:border-white/5 flex items-center justify-between">
-            <div className="flex items-center gap-2.5">
-              <div className="w-9 h-9 rounded-2xl bg-gradient-to-tr from-emerald-500 to-indigo-600 text-white flex items-center justify-center shadow-md">
-                <Sparkles className="w-5 h-5 text-amber-300" />
+          {/* Sheet */}
+          <motion.div
+            ref={panelRef}
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby={titleId}
+            tabIndex={-1}
+            initial={{ y: 32, opacity: 0 }}
+            animate={{ y: 0, opacity: 1 }}
+            exit={{ y: 32, opacity: 0 }}
+            transition={{ duration: 0.22, ease: [0.16, 1, 0.3, 1] }}
+            className="relative flex h-[88dvh] w-full max-w-xl flex-col overflow-hidden rounded-t-card bg-surface shadow-[var(--shadow-overlay)] outline-none sm:h-[80dvh] sm:rounded-card"
+          >
+            {/* Header */}
+            <div className="flex items-start justify-between gap-4 border-b border-rule px-5 pt-5 pb-4">
+              <div className="min-w-0">
+                <h2 id={titleId} className="text-lg text-ink">
+                  Thêm giao dịch
+                </h2>
+                {hasCloudAi && (
+                  <p className="mt-0.5 text-sm text-muted">
+                    Trợ lý {aiSettings.provider === 'gemini' ? 'Gemini' : 'DeepSeek'}: nói, gõ hoặc chụp hóa đơn
+                  </p>
+                )}
               </div>
-              <div>
-                <h3 className="text-base font-bold text-neutral-900 dark:text-white flex items-center gap-1.5">
-                  Trợ Lý Chi Tiêu AI
-                  <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-full bg-indigo-500/10 text-indigo-500 border border-indigo-500/20">
-                    Auto-Classify
-                  </span>
-                </h3>
-                <p className="text-xs text-neutral-500 dark:text-neutral-400">
-                  Voice &bull; Chat &bull; Quét hóa đơn WebP 85
-                </p>
-              </div>
+              <button type="button" onClick={closeAssistant} aria-label="Đóng" className={cn(iconButton, '-mr-2 -mt-1')}>
+                <X className="w-5 h-5" aria-hidden="true" />
+              </button>
             </div>
 
-            <button
-              onClick={closeAssistant}
-              className="p-2 text-neutral-400 hover:text-neutral-700 dark:hover:text-white rounded-full hover:bg-neutral-100 dark:hover:bg-neutral-800 transition-colors"
-            >
-              <X className="w-5 h-5" />
-            </button>
-          </div>
-
-          {/* Chat Messages Feed */}
-          <div className="flex-1 p-4 overflow-y-auto no-scrollbar space-y-3.5">
-            {messages.map((msg) => {
-              const isUser = msg.sender === 'user';
-              return (
-                <div
-                  key={msg.id}
-                  className={`flex gap-2.5 ${isUser ? 'justify-end' : 'justify-start'}`}
-                >
-                  {!isUser && (
-                    <div className="w-7 h-7 rounded-full bg-gradient-to-tr from-emerald-500 to-indigo-600 text-white flex items-center justify-center shrink-0 text-xs">
-                      <Bot className="w-4 h-4" />
+            {/* Conversation */}
+            <div className="flex-1 space-y-3 overflow-y-auto px-4 py-4" aria-live="polite" aria-relevant="additions">
+              {messages.map((msg) => {
+                const isUser = msg.sender === 'user';
+                return (
+                  <div key={msg.id} className={cn('flex', isUser ? 'justify-end' : 'justify-start')}>
+                    <div
+                      className={cn(
+                        'max-w-[85%] rounded-card px-3.5 py-2.5 text-sm leading-relaxed',
+                        isUser
+                          ? 'rounded-br-[4px] bg-accent text-accent-ink'
+                          : msg.isError
+                            ? 'rounded-bl-[4px] bg-expense-soft text-ink'
+                            : 'rounded-bl-[4px] bg-paper-3 text-ink'
+                      )}
+                    >
+                      {msg.imageUrl && (
+                        <img src={msg.imageUrl} alt="Ảnh hóa đơn đã gửi" className="mb-2 max-h-48 w-full rounded-control object-cover" />
+                      )}
+                      <p className="whitespace-pre-wrap">{msg.text}</p>
                     </div>
-                  )}
-
-                  <div
-                    className={`max-w-[85%] rounded-2xl p-3.5 text-xs sm:text-sm ${
-                      isUser
-                        ? 'bg-emerald-600 text-white rounded-br-sm'
-                        : 'bg-neutral-100 dark:bg-neutral-800/90 text-neutral-800 dark:text-neutral-200 rounded-bl-sm border border-neutral-200/50 dark:border-white/5'
-                    }`}
-                  >
-                    {msg.imageUrl && (
-                      <div className="mb-2 rounded-xl overflow-hidden max-h-48">
-                        <img
-                          src={msg.imageUrl}
-                          alt="Hóa đơn"
-                          className="w-full h-auto object-cover"
-                        />
-                      </div>
-                    )}
-                    <p className="leading-relaxed whitespace-pre-wrap">{msg.text}</p>
                   </div>
+                );
+              })}
 
-                  {isUser && (
-                    <div className="w-7 h-7 rounded-full bg-neutral-300 dark:bg-neutral-700 text-neutral-700 dark:text-neutral-200 flex items-center justify-center shrink-0 text-xs">
-                      <User className="w-4 h-4" />
+              {isProcessing && (
+                <p role="status" className="flex items-center gap-2 py-1 text-sm text-muted">
+                  <span className="h-4 w-4 rounded-full border-2 border-current border-t-transparent motion-safe:animate-spin" aria-hidden="true" />
+                  <span>Đang phân tích…</span>
+                </p>
+              )}
+
+              <div ref={messagesEndRef} />
+            </div>
+
+            {/* Preview of the parsed transaction */}
+            {currentPreview && (
+              <div className="mx-4 mb-3 rounded-card border border-rule-strong bg-paper-2 p-4">
+                <div className="flex items-baseline justify-between gap-3">
+                  <h3 className="text-sm font-semibold text-ink">Kiểm tra trước khi lưu</h3>
+                  <p className="text-xs text-muted">Sai? Gõ tiếp để sửa</p>
+                </div>
+
+                <dl className="mt-3 grid grid-cols-2 gap-x-4 gap-y-2 text-sm">
+                  <div>
+                    <dt className="text-xs text-muted">Số tiền</dt>
+                    <dd className={cn('figure text-lg font-bold', currentPreview.type === 'income' ? 'text-income' : 'text-expense')}>
+                      {currentPreview.type === 'income' ? '+' : '−'}
+                      {formatCurrency(currentPreview.amount, currentPreview.currency)}
+                    </dd>
+                  </div>
+                  <div>
+                    <dt className="text-xs text-muted">Loại</dt>
+                    <dd className="font-semibold text-ink">{currentPreview.type === 'income' ? 'Thu nhập' : 'Chi tiêu'}</dd>
+                  </div>
+                  <div>
+                    <dt className="text-xs text-muted">Danh mục</dt>
+                    <dd className="truncate font-semibold text-ink">{currentPreview.categoryName}</dd>
+                  </div>
+                  <div>
+                    <dt className="text-xs text-muted">Nguồn tiền</dt>
+                    <dd className="truncate font-semibold text-ink">{currentPreview.walletName || 'Mặc định'}</dd>
+                  </div>
+                  {currentPreview.note && (
+                    <div className="col-span-2">
+                      <dt className="text-xs text-muted">Ghi chú</dt>
+                      <dd className="truncate text-ink-2">{currentPreview.note}</dd>
                     </div>
                   )}
-                </div>
-              );
-            })}
+                </dl>
 
-            {isProcessing && (
-              <div className="flex items-center gap-2 text-xs text-neutral-400 italic py-1 pl-9">
-                <span className="w-2 h-2 rounded-full bg-emerald-500 animate-ping" />
-                <span>AI đang phân tích và bóc tách giao dịch...</span>
+                {!canSave && (
+                  <p className="mt-2 text-sm font-semibold text-expense">Chưa có số tiền hợp lệ. Gõ lại kèm số tiền.</p>
+                )}
+
+                <div className="mt-4 flex gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setCurrentPreview(null)}
+                    className="h-10 rounded-control border border-rule-strong bg-surface px-4 text-sm font-semibold text-ink hover:bg-paper-3 transition-colors"
+                  >
+                    Bỏ
+                  </button>
+                  <button
+                    type="button"
+                    onClick={handleConfirmSave}
+                    disabled={!canSave}
+                    className="flex h-10 flex-1 items-center justify-center gap-2 rounded-control bg-accent px-4 text-sm font-semibold text-accent-ink hover:bg-accent-hover disabled:opacity-55 transition-colors"
+                  >
+                    <Check className="w-4 h-4" aria-hidden="true" />
+                    <span>Lưu giao dịch</span>
+                  </button>
+                </div>
               </div>
             )}
 
-            <div ref={messagesEndRef} />
-          </div>
+            {speechError && (
+              <p role="alert" className="mx-4 mb-2 flex items-center gap-2 rounded-control bg-expense-soft p-2.5 text-sm text-ink">
+                <AlertCircle className="w-4 h-4 shrink-0 text-expense" aria-hidden="true" />
+                <span>{speechError}</span>
+              </p>
+            )}
 
-          {/* Transaction Preview Card (If parsed) */}
-          {currentPreview && (
-            <div className="mx-4 mb-3 p-4 rounded-2xl bg-gradient-to-r from-emerald-500/10 via-indigo-500/10 to-purple-500/10 border border-emerald-500/30 backdrop-blur-md">
-              <div className="flex items-center justify-between mb-2">
-                <span className="text-[11px] font-bold uppercase tracking-wider text-emerald-600 dark:text-emerald-400">
-                  Xem trước giao dịch trích xuất
-                </span>
-                <span className="text-[11px] text-neutral-400">
-                  (Nếu chưa đúng, hãy chat tiếp để yêu cầu sửa)
-                </span>
-              </div>
-
-              <div className="grid grid-cols-2 gap-2 text-xs">
-                <div>
-                  <span className="text-neutral-400 block text-[10px]">Phân loại</span>
-                  <span className={`font-bold ${currentPreview.type === 'income' ? 'text-emerald-500' : 'text-rose-500'}`}>
-                    {currentPreview.type === 'income' ? 'Thu nhập (+)' : 'Chi tiêu (-)'}
-                  </span>
-                </div>
-
-                <div>
-                  <span className="text-neutral-400 block text-[10px]">Số tiền</span>
-                  <span className="font-extrabold font-mono text-sm text-neutral-900 dark:text-white">
-                    {formatCurrency(currentPreview.amount, currentPreview.currency)}
-                  </span>
-                </div>
-
-                <div>
-                  <span className="text-neutral-400 block text-[10px]">Danh mục</span>
-                  <span className="font-semibold text-neutral-800 dark:text-neutral-200">
-                    {currentPreview.categoryName}
-                  </span>
-                </div>
-
-                <div>
-                  <span className="text-neutral-400 block text-[10px]">Nguồn tiền / Ví</span>
-                  <span className="font-semibold text-neutral-800 dark:text-neutral-200">
-                    {currentPreview.walletName || 'Mặc định'}
-                  </span>
-                </div>
-              </div>
-
-              {currentPreview.note && (
-                <div className="mt-2 text-xs text-neutral-500 dark:text-neutral-400 italic">
-                  Ghi chú: {currentPreview.note}
-                </div>
-              )}
-
-              {/* Action: Confirm & Save button */}
-              <div className="mt-3 flex gap-2">
+            {/* Composer */}
+            <div className="border-t border-rule bg-paper-2 p-3 pb-[max(0.75rem,env(safe-area-inset-bottom))]">
+              <form
+                onSubmit={(e) => {
+                  e.preventDefault();
+                  handleProcessInput();
+                }}
+                className="flex items-center gap-1.5"
+              >
+                <input
+                  ref={fileInputRef}
+                  type="file"
+                  accept={ACCEPTED_IMAGE_TYPES.join(',')}
+                  onChange={handleFileChange}
+                  className="hidden"
+                  tabIndex={-1}
+                  aria-hidden="true"
+                />
                 <button
-                  onClick={() => setCurrentPreview(null)}
-                  className="px-3 py-2 rounded-xl text-xs font-semibold text-neutral-500 hover:bg-neutral-200 dark:hover:bg-neutral-800 transition-colors"
+                  type="button"
+                  onClick={() => fileInputRef.current?.click()}
+                  disabled={isProcessing}
+                  className={iconButton}
+                  aria-label="Gửi ảnh hóa đơn"
+                  title={canReadReceipts ? 'Chụp hoặc chọn ảnh hóa đơn' : 'Cần Gemini API key để đọc hóa đơn'}
                 >
-                  Hủy
+                  <Camera className="w-5 h-5" aria-hidden="true" />
                 </button>
+
                 <button
-                  onClick={handleConfirmSave}
-                  className="flex-1 py-2 px-4 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold shadow-lg shadow-emerald-600/25 flex items-center justify-center gap-1.5 cursor-pointer active:scale-95 transition-all"
+                  type="button"
+                  onClick={handleToggleVoice}
+                  aria-pressed={isListening}
+                  aria-label={isListening ? 'Dừng ghi âm' : 'Nói bằng giọng nói'}
+                  className={cn(iconButton, isListening && 'bg-expense text-accent-ink hover:bg-expense hover:text-accent-ink')}
                 >
-                  <Check className="w-4 h-4 stroke-[2.5]" />
-                  <span>Xác nhận & Lưu giao dịch</span>
+                  {isListening ? <MicOff className="w-5 h-5" aria-hidden="true" /> : <Mic className="w-5 h-5" aria-hidden="true" />}
                 </button>
-              </div>
+
+                <label htmlFor="assistant-input" className="sr-only">
+                  Nội dung giao dịch
+                </label>
+                <input
+                  id="assistant-input"
+                  name="assistantInput"
+                  type="text"
+                  autoComplete="off"
+                  enterKeyHint="send"
+                  maxLength={500}
+                  data-autofocus
+                  placeholder={
+                    isListening
+                      ? 'Đang nghe…'
+                      : currentPreview
+                        ? 'Sửa: “đổi thành 70k”, “ví PayPal”…'
+                        : 'Bún bò 65k tiền mặt, lương 30tr…'
+                  }
+                  value={input}
+                  onChange={(e) => setInput(e.target.value)}
+                  disabled={isProcessing}
+                  className="field flex-1 min-w-0"
+                />
+
+                <button
+                  type="submit"
+                  disabled={!input.trim() || isProcessing}
+                  aria-label="Gửi"
+                  className="grid h-10 w-10 shrink-0 place-items-center rounded-control bg-accent text-accent-ink hover:bg-accent-hover disabled:opacity-55 transition-colors"
+                >
+                  <Send className="w-4 h-4" aria-hidden="true" />
+                </button>
+              </form>
             </div>
-          )}
-
-          {speechError && (
-            <div className="mx-4 mb-2 p-2 rounded-xl bg-rose-500/10 text-rose-500 text-xs flex items-center gap-2">
-              <AlertCircle className="w-4 h-4 shrink-0" />
-              <span>{speechError}</span>
-            </div>
-          )}
-
-          {/* Bottom Controls: Voice, Photo, Text Input */}
-          <div className="p-3 bg-neutral-50 dark:bg-[#0c0f18] border-t border-neutral-200 dark:border-white/5">
-            <form
-              onSubmit={(e) => {
-                e.preventDefault();
-                handleProcessInput();
-              }}
-              className="flex items-center gap-2"
-            >
-              {/* Photo Bill Upload */}
-              <input
-                ref={fileInputRef}
-                type="file"
-                accept="image/*"
-                capture="environment"
-                onChange={handleFileChange}
-                className="hidden"
-              />
-              <button
-                type="button"
-                onClick={() => fileInputRef.current?.click()}
-                disabled={isProcessing}
-                className="p-2.5 rounded-xl text-neutral-500 dark:text-neutral-400 hover:text-neutral-900 dark:hover:text-white hover:bg-neutral-200 dark:hover:bg-neutral-800 transition-colors cursor-pointer"
-                title="Chụp hoặc tải ảnh hóa đơn (tự nén WebP 85)"
-              >
-                <ImageIcon className="w-5 h-5" />
-              </button>
-
-              {/* Voice Input Mic Button */}
-              <button
-                type="button"
-                onClick={handleToggleVoice}
-                className={`p-2.5 rounded-xl transition-all cursor-pointer ${
-                  isListening
-                    ? 'bg-rose-500 text-white animate-pulse shadow-lg shadow-rose-500/30'
-                    : 'text-neutral-500 dark:text-neutral-400 hover:text-neutral-900 dark:hover:text-white hover:bg-neutral-200 dark:hover:bg-neutral-800'
-                }`}
-                title={isListening ? 'Đang lắng nghe... bấm để dừng' : 'Nói bằng giọng nói'}
-              >
-                {isListening ? <MicOff className="w-5 h-5" /> : <Mic className="w-5 h-5" />}
-              </button>
-
-              {/* Text Input */}
-              <input
-                type="text"
-                placeholder={
-                  isListening
-                    ? 'Đang lắng nghe giọng nói của bạn...'
-                    : currentPreview
-                    ? 'Chat tiếp để sửa (VD: đổi thành 70k, ví paypal)...'
-                    : 'VD: Ăn bún bò 65k tiền mặt, lương 30tr...'
-                }
-                value={input}
-                onChange={(e) => setInput(e.target.value)}
-                disabled={isProcessing}
-                className="flex-1 px-4 py-2.5 rounded-xl bg-white dark:bg-neutral-900 border border-neutral-300 dark:border-neutral-700 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500"
-              />
-
-              {/* Send Button */}
-              <button
-                type="submit"
-                disabled={!input.trim() || isProcessing}
-                className="p-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white disabled:opacity-40 disabled:cursor-not-allowed shadow-md shadow-emerald-600/20 cursor-pointer active:scale-95 transition-all"
-              >
-                <Send className="w-4 h-4" />
-              </button>
-            </form>
-          </div>
-        </motion.div>
-      </div>
-    </AnimatePresence>
+          </motion.div>
+        </div>
+      )}
+    </AnimatePresence>,
+    document.body
   );
 };

@@ -12,11 +12,13 @@ import {
   saveStoredExchangeRates,
   convertToVnd,
   fetchLiveExchangeRates,
+  isRatesStale,
   DEFAULT_EXCHANGE_RATES,
 } from '../services/currency';
 import {
   getStoredAiSettings,
   saveStoredAiSettings,
+  clearStoredAiKeys,
   DEFAULT_AI_SETTINGS,
 } from '../services/ai';
 import {
@@ -26,6 +28,7 @@ import {
   saveTransactions,
   recalculateWalletBalances,
 } from '../services/storage';
+import { newId } from '../utils/date';
 
 interface WalletContextType {
   // Navigation & UI state
@@ -34,10 +37,9 @@ interface WalletContextType {
   isAssistantOpen: boolean;
   openAssistant: () => void;
   closeAssistant: () => void;
-  isBalanceHidden: boolean;
-  toggleBalanceHidden: () => void;
 
   // Data
+  isReady: boolean;
   wallets: Wallet[];
   categories: Category[];
   transactions: Transaction[];
@@ -73,10 +75,8 @@ const WalletContext = createContext<WalletContextType | undefined>(undefined);
 export const WalletProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [activeTab, setActiveTab] = useState<ActiveTab>('dashboard');
   const [isAssistantOpen, setIsAssistantOpen] = useState<boolean>(false);
-  const [isBalanceHidden, setIsBalanceHidden] = useState<boolean>(() => {
-    return localStorage.getItem('mywallet_hide_balance') === 'true';
-  });
 
+  const [isReady, setIsReady] = useState<boolean>(false);
   const [wallets, setWallets] = useState<Wallet[]>([]);
   const [categories, setCategories] = useState<Category[]>([]);
   const [transactions, setTransactions] = useState<Transaction[]>([]);
@@ -89,20 +89,21 @@ export const WalletProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     setWallets(data.wallets);
     setCategories(data.categories);
     setTransactions(data.transactions);
+    setIsReady(true);
 
-    // Auto-fetch fresh rates on startup silently
-    fetchLiveExchangeRates().then((rates) => {
-      if (rates) setExchangeRatesState(rates);
-    });
+    // Rates are always automatic: refresh on start, and again when the app comes back after a while
+    const refreshIfStale = () => {
+      if (!isRatesStale(getStoredExchangeRates())) return;
+      fetchLiveExchangeRates().then((rates) => {
+        if (rates) setExchangeRatesState(rates);
+      });
+    };
+    refreshIfStale();
+    const onVisible = () => document.visibilityState === 'visible' && refreshIfStale();
+    document.addEventListener('visibilitychange', onVisible);
+    return () => document.removeEventListener('visibilitychange', onVisible);
   }, []);
 
-  const toggleBalanceHidden = () => {
-    setIsBalanceHidden((prev) => {
-      const next = !prev;
-      localStorage.setItem('mywallet_hide_balance', String(next));
-      return next;
-    });
-  };
 
   const openAssistant = () => setIsAssistantOpen(true);
   const closeAssistant = () => setIsAssistantOpen(false);
@@ -127,7 +128,7 @@ export const WalletProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     const { amountVnd, rateUsed } = convertToVnd(txData.amount, txData.currency, exchangeRates);
     const newTx: Transaction = {
       ...txData,
-      id: `tx-${Date.now()}-${Math.random().toString(36).substr(2, 6)}`,
+      id: newId('tx'),
       amountVnd,
       exchangeRate: rateUsed,
       createdAt: new Date().toISOString(),
@@ -168,7 +169,7 @@ export const WalletProvider: React.FC<{ children: React.ReactNode }> = ({ childr
   const addWallet = (walletData: Omit<Wallet, 'id' | 'currentBalance'>): Wallet => {
     const newWallet: Wallet = {
       ...walletData,
-      id: `w-${Date.now()}`,
+      id: newId('w'),
       currentBalance: Number(walletData.initialBalance) || 0,
     };
     const newWallets = [...wallets, newWallet];
@@ -190,7 +191,7 @@ export const WalletProvider: React.FC<{ children: React.ReactNode }> = ({ childr
   const addCategory = (categoryData: Omit<Category, 'id'>): Category => {
     const newCat: Category = {
       ...categoryData,
-      id: `c-${Date.now()}`,
+      id: newId('c'),
     };
     const newCats = [...categories, newCat];
     setCategories(newCats);
@@ -233,11 +234,15 @@ export const WalletProvider: React.FC<{ children: React.ReactNode }> = ({ childr
 
   const resetAllData = () => {
     localStorage.clear();
+    clearStoredAiKeys();
     const data = initializeStorageIfNeeded();
     setWallets(data.wallets);
     setCategories(data.categories);
     setTransactions(data.transactions);
     setExchangeRatesState(DEFAULT_EXCHANGE_RATES);
+    fetchLiveExchangeRates().then((rates) => {
+      if (rates) setExchangeRatesState(rates);
+    });
     setAiSettingsState(DEFAULT_AI_SETTINGS);
   };
 
@@ -280,8 +285,7 @@ export const WalletProvider: React.FC<{ children: React.ReactNode }> = ({ childr
         isAssistantOpen,
         openAssistant,
         closeAssistant,
-        isBalanceHidden,
-        toggleBalanceHidden,
+        isReady,
         wallets,
         categories,
         transactions,

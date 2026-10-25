@@ -1,7 +1,9 @@
-import React, { useEffect } from 'react';
+import React, { useId } from 'react';
+import { createPortal } from 'react-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import { X } from 'lucide-react';
 import { cn } from '../../utils/cn';
+import { useDialog } from '../../utils/useDialog';
 
 interface ModalProps {
   isOpen: boolean;
@@ -22,75 +24,77 @@ export const Modal: React.FC<ModalProps> = ({
   isBottomSheetOnMobile = true,
   maxWidth = 'max-w-lg',
 }) => {
-  useEffect(() => {
-    if (isOpen) {
-      document.body.style.overflow = 'hidden';
-    } else {
-      document.body.style.overflow = '';
-    }
-    return () => {
-      document.body.style.overflow = '';
-    };
-  }, [isOpen]);
+  const panelRef = useDialog(isOpen, onClose);
+  const titleId = useId();
+  const descId = useId();
 
-  return (
+  return createPortal(
     <AnimatePresence>
       {isOpen && (
-        <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4">
+        <div className="fixed inset-0 z-[400] flex items-end sm:items-center justify-center sm:p-4">
           {/* Backdrop */}
           <motion.div
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
-            transition={{ duration: 0.2 }}
+            transition={{ duration: 0.15 }}
             onClick={onClose}
-            className="fixed inset-0 bg-black/60 backdrop-blur-sm"
+            aria-hidden="true"
+            className="fixed inset-0 bg-scrim"
           />
 
           {/* Modal / Bottom Sheet Content */}
           <motion.div
-            initial={isBottomSheetOnMobile ? { y: '100%', opacity: 0.5 } : { scale: 0.95, opacity: 0 }}
+            ref={panelRef}
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby={title ? titleId : undefined}
+            aria-describedby={description ? descId : undefined}
+            tabIndex={-1}
+            initial={isBottomSheetOnMobile ? { y: 24, opacity: 0 } : { scale: 0.98, opacity: 0 }}
             animate={{ y: 0, scale: 1, opacity: 1 }}
-            exit={isBottomSheetOnMobile ? { y: '100%', opacity: 0 } : { scale: 0.95, opacity: 0 }}
-            transition={{ type: 'spring', damping: 28, stiffness: 300 }}
+            exit={isBottomSheetOnMobile ? { y: 24, opacity: 0 } : { scale: 0.98, opacity: 0 }}
+            transition={{ duration: 0.2, ease: [0.16, 1, 0.3, 1] }}
             className={cn(
-              'relative w-full z-10 bg-white dark:bg-[#121623] border-t sm:border border-neutral-200 dark:border-white/10 shadow-2xl',
-              isBottomSheetOnMobile
-                ? 'rounded-t-[28px] sm:rounded-2xl max-h-[92vh] sm:max-h-[85vh] flex flex-col'
-                : 'rounded-2xl max-h-[85vh] flex flex-col',
+              'relative w-full bg-surface shadow-[var(--shadow-overlay)] flex flex-col max-h-[92dvh] sm:max-h-[85dvh] outline-none',
+              isBottomSheetOnMobile ? 'rounded-t-card sm:rounded-card' : 'rounded-card',
               maxWidth
             )}
           >
-            {/* Grabber handle on mobile */}
-            {isBottomSheetOnMobile && (
-              <div className="w-full flex justify-center pt-3 pb-1 sm:hidden">
-                <div className="w-12 h-1.5 bg-neutral-300 dark:bg-neutral-700 rounded-full" />
-              </div>
-            )}
-
             {/* Header */}
             {(title || description) && (
-              <div className="flex items-center justify-between px-6 pt-4 pb-3 border-b border-neutral-100 dark:border-white/5">
-                <div>
-                  {title && <h3 className="text-lg font-bold text-neutral-900 dark:text-white">{title}</h3>}
+              <div className="flex items-start justify-between gap-4 px-5 sm:px-6 pt-5 pb-4 border-b border-rule">
+                <div className="min-w-0">
+                  {title && (
+                    <h2 id={titleId} className="text-lg text-ink">
+                      {title}
+                    </h2>
+                  )}
                   {description && (
-                    <p className="text-xs text-neutral-500 dark:text-neutral-400 mt-0.5">{description}</p>
+                    <p id={descId} className="text-sm text-muted mt-1">
+                      {description}
+                    </p>
                   )}
                 </div>
                 <button
+                  type="button"
                   onClick={onClose}
-                  className="p-2 text-neutral-400 hover:text-neutral-700 dark:hover:text-white rounded-full hover:bg-neutral-100 dark:hover:bg-neutral-800 transition-colors"
+                  aria-label="Đóng"
+                  className="-mr-2 -mt-1 grid h-10 w-10 shrink-0 place-items-center rounded-control text-muted hover:bg-paper-3 hover:text-ink transition-colors"
                 >
-                  <X className="w-5 h-5" />
+                  <X className="w-5 h-5" aria-hidden="true" />
                 </button>
               </div>
             )}
 
             {/* Body */}
-            <div className="p-6 overflow-y-auto no-scrollbar flex-1">{children}</div>
+            <div className="px-5 sm:px-6 py-5 overflow-y-auto flex-1 pb-[max(1.25rem,env(safe-area-inset-bottom))]">
+              {children}
+            </div>
           </motion.div>
         </div>
       )}
-    </AnimatePresence>
+    </AnimatePresence>,
+    document.body
   );
 };

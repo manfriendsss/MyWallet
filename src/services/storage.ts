@@ -1,5 +1,20 @@
 import type { Category, Transaction, Wallet } from '../types';
 import { convertToVnd, getStoredExchangeRates } from './currency';
+import { toLocalISODate } from '../utils/date';
+
+/** Storage is user-editable: only accept an array of objects, otherwise fall back */
+function readArray<T>(key: string, fallback: T[]): T[] {
+  try {
+    const raw = localStorage.getItem(key);
+    if (raw) {
+      const parsed = JSON.parse(raw);
+      if (Array.isArray(parsed) && parsed.every((item) => item && typeof item === 'object')) return parsed;
+    }
+  } catch (e) {
+    console.error(`Error loading ${key}:`, e);
+  }
+  return fallback;
+}
 
 const KEYS = {
   WALLETS: 'mywallet_data_wallets',
@@ -72,7 +87,7 @@ function generateSeedTransactions(): Transaction[] {
   const formatDate = (offsetDays: number) => {
     const d = new Date(now);
     d.setDate(d.getDate() - offsetDays);
-    return d.toISOString().split('T')[0];
+    return toLocalISODate(d);
   };
 
   const seed: Array<Omit<Transaction, 'amountVnd' | 'exchangeRate'>> = [
@@ -161,33 +176,17 @@ function generateSeedTransactions(): Transaction[] {
 }
 
 export function loadWallets(): Wallet[] {
-  try {
-    const raw = localStorage.getItem(KEYS.WALLETS);
-    if (raw) return JSON.parse(raw);
-  } catch (e) {
-    console.error('Error loading wallets:', e);
-  }
-  return INITIAL_WALLETS;
+  return readArray(KEYS.WALLETS, INITIAL_WALLETS);
 }
 
 export function loadCategories(): Category[] {
-  try {
-    const raw = localStorage.getItem(KEYS.CATEGORIES);
-    if (raw) return JSON.parse(raw);
-  } catch (e) {
-    console.error('Error loading categories:', e);
-  }
-  return INITIAL_CATEGORIES;
+  return readArray(KEYS.CATEGORIES, INITIAL_CATEGORIES);
 }
 
 export function loadTransactions(): Transaction[] {
-  try {
-    const raw = localStorage.getItem(KEYS.TRANSACTIONS);
-    if (raw) return JSON.parse(raw);
-  } catch (e) {
-    console.error('Error loading transactions:', e);
-  }
-  return [];
+  return readArray<Transaction>(KEYS.TRANSACTIONS, []).filter(
+    (tx) => typeof tx.date === 'string' && Number.isFinite(Number(tx.amount))
+  );
 }
 
 export function initializeStorageIfNeeded(): {

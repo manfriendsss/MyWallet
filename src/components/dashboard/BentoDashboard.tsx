@@ -6,27 +6,22 @@ import { CategoriesCard } from './CategoriesCard';
 
 export const BentoDashboard: React.FC = () => {
   return (
-    <div className="space-y-5 md:space-y-6">
-      {/* 1. Big Balance Card (Full width on both mobile and desktop) */}
+    <div className="space-y-6">
+      {/* 1. The balance ledger */}
       <TotalBalanceCard />
 
-      {/* 2. Desktop Bento Grid / Mobile 1-Column Stack */}
-      <div className="grid grid-cols-1 lg:grid-cols-12 gap-5 md:gap-6">
-        {/* Nguồn tiền / Ví (Lg: 5 cols) */}
-        <div className="lg:col-span-5 flex flex-col">
-          <WalletsCard />
-        </div>
-
-        {/* 10 Giao dịch gần nhất (Lg: 7 cols) */}
-        <div className="lg:col-span-7 flex flex-col">
+      {/* 2. Recent activity leads; sources sit beside it */}
+      <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
+        <div className="lg:col-span-7 lg:order-2 min-w-0">
           <RecentTransactionsCard />
         </div>
-
-        {/* Danh mục Thu & Chi (Lg: 12 cols full width bottom card) */}
-        <div className="lg:col-span-12 flex flex-col">
-          <CategoriesCard />
+        <div className="lg:col-span-5 lg:order-1 min-w-0">
+          <WalletsCard />
         </div>
       </div>
+
+      {/* 3. Categories */}
+      <CategoriesCard />
     </div>
   );
 };

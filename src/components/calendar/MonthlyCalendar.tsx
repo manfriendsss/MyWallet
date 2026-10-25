@@ -14,15 +14,18 @@ import {
 } from 'date-fns';
 import { vi } from 'date-fns/locale';
 import { motion, AnimatePresence } from 'framer-motion';
-import { ChevronLeft, ChevronRight, Calendar as CalendarIcon, Sparkles } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Plus } from 'lucide-react';
 import { useWallet } from '../../context/WalletContext';
 import { Card } from '../ui/Card';
 import { Modal } from '../ui/Modal';
-import { IconRenderer } from '../ui/IconRenderer';
-import { formatCurrency, formatCompactCurrency } from '../../utils/formatters';
+import { Button } from '../ui/Button';
+import { TransactionRow } from '../dashboard/TransactionRow';
+import { formatCompactCurrency, formatCurrency, formatDate } from '../../utils/formatters';
+import { cn } from '../../utils/cn';
+import { CARD_ART } from '../../assets/cards';
 
 export const MonthlyCalendar: React.FC = () => {
-  const { transactions, categories, wallets, openAssistant, isBalanceHidden } = useWallet();
+  const { transactions, categories, wallets, openAssistant } = useWallet();
   const [currentDate, setCurrentDate] = useState(new Date());
   const [direction, setDirection] = useState<number>(0);
   const [selectedDay, setSelectedDay] = useState<Date | null>(null);
@@ -35,6 +38,11 @@ export const MonthlyCalendar: React.FC = () => {
   const nextMonth = () => {
     setDirection(1);
     setCurrentDate((d) => addMonths(d, 1));
+  };
+
+  const goToday = () => {
+    setDirection(0);
+    setCurrentDate(new Date());
   };
 
   const monthStart = startOfMonth(currentDate);
@@ -74,91 +82,81 @@ export const MonthlyCalendar: React.FC = () => {
     : [];
 
   const weekDayHeaders = ['T2', 'T3', 'T4', 'T5', 'T6', 'T7', 'CN'];
+  const isCurrentMonthView = isSameMonth(currentDate, new Date());
 
   return (
-    <div className="space-y-5">
-      {/* Top Banner: Month Selector & Quick Totals */}
-      <Card className="p-4 sm:p-6 bg-gradient-to-r from-neutral-900 via-neutral-900 to-[#121623] text-white border-neutral-800">
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-2xl bg-white/10 flex items-center justify-center backdrop-blur-md">
-              <CalendarIcon className="w-5 h-5 text-emerald-400" />
-            </div>
-            <div>
-              <h2 className="text-xl sm:text-2xl font-extrabold capitalize text-white">
-                {format(currentDate, 'MMMM, yyyy', { locale: vi })}
-              </h2>
-              <p className="text-xs text-neutral-400">
-                Vuốt hoặc bấm mũi tên để xem các tháng khác
-              </p>
-            </div>
-          </div>
-
-          <div className="flex items-center gap-4 self-end sm:self-auto">
-            {/* Quick stats for this month */}
-            <div className="flex items-center gap-3 text-xs sm:text-sm font-mono">
-              <div className="text-right">
-                <span className="text-[10px] text-neutral-400 block uppercase">Thu</span>
-                <span className="text-emerald-400 font-bold">
-                  {isBalanceHidden ? '••••••' : `+${formatCompactCurrency(monthTotalIncome, 'VND')}`}
-                </span>
-              </div>
-              <div className="w-px h-6 bg-white/10" />
-              <div className="text-right">
-                <span className="text-[10px] text-neutral-400 block uppercase">Chi</span>
-                <span className="text-rose-400 font-bold">
-                  {isBalanceHidden ? '••••••' : `-${formatCompactCurrency(monthTotalExpense, 'VND')}`}
-                </span>
-              </div>
-            </div>
-
-            {/* Navigation buttons */}
-            <div className="flex items-center gap-1 bg-white/10 p-1 rounded-xl">
-              <button
-                onClick={prevMonth}
-                className="p-1.5 rounded-lg hover:bg-white/10 transition-colors text-neutral-300 hover:text-white cursor-pointer"
-                title="Tháng trước"
-              >
-                <ChevronLeft className="w-5 h-5" />
-              </button>
-              <button
-                onClick={nextMonth}
-                className="p-1.5 rounded-lg hover:bg-white/10 transition-colors text-neutral-300 hover:text-white cursor-pointer"
-                title="Tháng sau"
-              >
-                <ChevronRight className="w-5 h-5" />
-              </button>
-            </div>
-          </div>
+    <div className="space-y-6">
+      {/* Month selector & totals */}
+      <div className="flex flex-wrap items-end justify-between gap-4">
+        <div className="flex items-center gap-2">
+          <button
+            type="button"
+            onClick={prevMonth}
+            aria-label="Tháng trước"
+            className="grid h-10 w-10 place-items-center rounded-control border border-rule-strong bg-surface text-ink hover:bg-paper-2 transition-colors"
+          >
+            <ChevronLeft className="w-5 h-5" aria-hidden="true" />
+          </button>
+          <h2 aria-live="polite" className="min-w-[10ch] text-center text-xl text-ink capitalize">
+            {format(currentDate, 'MMMM yyyy', { locale: vi })}
+          </h2>
+          <button
+            type="button"
+            onClick={nextMonth}
+            aria-label="Tháng sau"
+            className="grid h-10 w-10 place-items-center rounded-control border border-rule-strong bg-surface text-ink hover:bg-paper-2 transition-colors"
+          >
+            <ChevronRight className="w-5 h-5" aria-hidden="true" />
+          </button>
+          {!isCurrentMonthView && (
+            <Button variant="ghost" size="sm" onClick={goToday}>
+              Về tháng này
+            </Button>
+          )}
         </div>
-      </Card>
 
-      {/* Calendar Grid with Slide Animation */}
-      <Card className="p-3 sm:p-5 overflow-hidden">
-        {/* Day of week headers */}
-        <div className="grid grid-cols-7 mb-2 text-center">
-          {weekDayHeaders.map((dayName, idx) => (
-            <div
-              key={dayName}
-              className={`py-2 text-xs font-bold uppercase tracking-wider ${
-                idx >= 5 ? 'text-amber-500/80 dark:text-amber-400/80' : 'text-neutral-500 dark:text-neutral-400'
-              }`}
-            >
+        <div className="flex w-full sm:w-auto items-end gap-6">
+        <dl className="flex gap-6">
+          <div>
+            <dt className="text-sm text-muted">Thu</dt>
+            <dd className="figure text-lg font-bold text-income">+{formatCompactCurrency(monthTotalIncome, 'VND')}</dd>
+          </div>
+          <div className="border-l border-rule pl-6">
+            <dt className="text-sm text-muted">Chi</dt>
+            <dd className="figure text-lg font-bold text-expense">−{formatCompactCurrency(monthTotalExpense, 'VND')}</dd>
+          </div>
+        </dl>
+          <img
+            src={CARD_ART.calendar}
+            alt=""
+            aria-hidden="true"
+            decoding="async"
+            width={64}
+            height={64}
+            className="ml-auto h-12 w-12 sm:h-16 sm:w-16 object-contain drop-shadow-[0_6px_10px_var(--color-glow-1)]"
+          />
+        </div>
+      </div>
+
+      {/* Calendar Grid */}
+      <Card className="p-2 sm:p-4 overflow-hidden">
+        <div className="grid grid-cols-7 text-center" aria-hidden="true">
+          {weekDayHeaders.map((dayName) => (
+            <div key={dayName} className="py-2 text-xs font-semibold text-muted">
               {dayName}
             </div>
           ))}
         </div>
 
-        {/* Days Grid animated with Framer Motion */}
-        <AnimatePresence mode="wait" custom={direction}>
+        <AnimatePresence mode="wait" initial={false} custom={direction}>
           <motion.div
             key={monthKey}
             custom={direction}
-            initial={{ opacity: 0, x: direction * 40 }}
+            initial={{ opacity: 0, x: direction * 16 }}
             animate={{ opacity: 1, x: 0 }}
-            exit={{ opacity: 0, x: -direction * 40 }}
-            transition={{ duration: 0.2 }}
-            className="grid grid-cols-7 gap-1 sm:gap-2"
+            exit={{ opacity: 0, x: -direction * 16 }}
+            transition={{ duration: 0.15 }}
+            className="grid grid-cols-7 gap-1 sm:gap-1.5"
           >
             {days.map((day) => {
               const dateStr = format(day, 'yyyy-MM-dd');
@@ -166,52 +164,52 @@ export const MonthlyCalendar: React.FC = () => {
               const isCurrentDay = isToday(day);
               const isSelected = selectedDay && isSameDay(day, selectedDay);
               const dayData = transactionsByDate[dateStr];
+              const label = `${formatDate(day)}${
+                dayData?.count ? `, ${dayData.count} giao dịch` : ''
+              }`;
 
               return (
                 <button
                   key={dateStr}
+                  type="button"
                   onClick={() => setSelectedDay(day)}
-                  className={`min-h-[70px] sm:min-h-[96px] p-1.5 sm:p-2 rounded-2xl border text-left flex flex-col justify-between transition-all duration-200 cursor-pointer ${
-                    !isCurrentMonth
-                      ? 'opacity-30 border-transparent bg-neutral-50/50 dark:bg-white/[0.01]'
-                      : isSelected
-                      ? 'border-emerald-500 bg-emerald-500/10 dark:bg-emerald-500/15 ring-2 ring-emerald-500/30'
-                      : 'border-neutral-200/60 dark:border-white/5 bg-white/50 dark:bg-[#121623]/60 hover:border-neutral-300 dark:hover:border-white/20'
-                  }`}
+                  aria-label={label}
+                  aria-current={isCurrentDay ? 'date' : undefined}
+                  className={cn(
+                    'min-h-[64px] sm:min-h-[92px] p-1.5 sm:p-2 rounded-control border text-left flex flex-col justify-between transition-colors min-w-0',
+                    isSelected
+                      ? 'border-accent bg-accent-soft'
+                      : isCurrentMonth
+                        ? 'border-rule bg-surface hover:border-rule-strong hover:bg-paper-2'
+                        : 'border-transparent bg-paper-2 text-muted'
+                  )}
                 >
-                  {/* Top: Day number */}
-                  <div className="flex items-center justify-between">
-                    <span
-                      className={`text-xs sm:text-sm font-semibold rounded-full w-6 h-6 flex items-center justify-center ${
-                        isCurrentDay
-                          ? 'bg-emerald-600 text-white font-bold'
-                          : isCurrentMonth
-                          ? 'text-neutral-800 dark:text-neutral-200'
-                          : 'text-neutral-400'
-                      }`}
-                    >
-                      {format(day, 'd')}
-                    </span>
-                    {dayData && dayData.count > 0 && (
-                      <span className="hidden sm:inline-block text-[9px] font-bold px-1.5 py-0.2 rounded-full bg-neutral-200 dark:bg-neutral-800 text-neutral-600 dark:text-neutral-300">
-                        {dayData.count} gd
-                      </span>
+                  <span
+                    className={cn(
+                      'figure grid h-6 w-6 place-items-center rounded-full text-xs sm:text-sm font-semibold',
+                      isCurrentDay ? 'bg-accent text-accent-ink' : isCurrentMonth ? 'text-ink' : 'text-muted'
                     )}
-                  </div>
+                  >
+                    {format(day, 'd')}
+                  </span>
 
-                  {/* Bottom: Daily Income (+) and Expense (-) numbers directly on cell */}
-                  <div className="space-y-0.5 mt-1 font-mono text-[10px] sm:text-xs">
-                    {dayData?.incomeVnd ? (
-                      <div className="text-emerald-600 dark:text-emerald-400 font-bold truncate leading-tight">
-                        +{formatCompactCurrency(dayData.incomeVnd, 'VND')}
-                      </div>
-                    ) : null}
-                    {dayData?.expenseVnd ? (
-                      <div className="text-rose-600 dark:text-rose-400 font-bold truncate leading-tight">
-                        -{formatCompactCurrency(dayData.expenseVnd, 'VND')}
-                      </div>
-                    ) : null}
-                  </div>
+                  {dayData && (
+                    <>
+                      {/* Phone cells are too narrow for full amounts: a mark per direction, the amounts open on tap */}
+                      <span className="mt-1 flex gap-1 sm:hidden" aria-hidden="true">
+                        {dayData.incomeVnd > 0 && <span className="h-1.5 w-1.5 rounded-full bg-income" />}
+                        {dayData.expenseVnd > 0 && <span className="h-1.5 w-1.5 rounded-full bg-expense" />}
+                      </span>
+                      <span className="figure mt-1 hidden space-y-0.5 text-xs font-semibold leading-tight sm:block">
+                        {dayData.incomeVnd > 0 && (
+                          <span className="block truncate text-income">+{formatCurrency(dayData.incomeVnd, 'VND')}</span>
+                        )}
+                        {dayData.expenseVnd > 0 && (
+                          <span className="block truncate text-expense">−{formatCurrency(dayData.expenseVnd, 'VND')}</span>
+                        )}
+                      </span>
+                    </>
+                  )}
                 </button>
               );
             })}
@@ -223,77 +221,57 @@ export const MonthlyCalendar: React.FC = () => {
       <Modal
         isOpen={Boolean(selectedDay)}
         onClose={() => setSelectedDay(null)}
-        title={selectedDay ? `Giao dịch ngày ${format(selectedDay, 'dd/MM/yyyy')}` : ''}
+        title={selectedDay ? `Giao dịch ngày ${formatDate(selectedDay)}` : ''}
         description={
           selectedDayTransactions.length > 0
-            ? `${selectedDayTransactions.length} giao dịch đã ghi nhận`
+            ? `${selectedDayTransactions.length} giao dịch`
             : 'Chưa có giao dịch nào trong ngày này'
         }
       >
-        <div className="space-y-3">
-          {selectedDayTransactions.length === 0 ? (
-            <div className="py-8 text-center flex flex-col items-center justify-center">
-              <CalendarIcon className="w-10 h-10 text-neutral-400 mb-2 stroke-[1.5]" />
-              <p className="text-sm text-neutral-500">Ngày này bạn chưa phát sinh thu chi</p>
-              <button
-                onClick={() => {
-                  setSelectedDay(null);
-                  openAssistant();
-                }}
-                className="mt-4 flex items-center gap-1.5 px-3.5 py-2 text-xs font-semibold rounded-xl bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 hover:bg-emerald-500/20 transition-colors"
-              >
-                <Sparkles className="w-4 h-4" />
-                <span>Nói hoặc thêm chi tiêu bằng AI</span>
-              </button>
-            </div>
-          ) : (
-            selectedDayTransactions.map((tx) => {
-              const cat = categories.find((c) => c.id === tx.categoryId);
-              const wallet = wallets.find((w) => w.id === tx.walletId);
-              const isIncome = tx.type === 'income';
-
-              return (
-                <div
+        {selectedDayTransactions.length === 0 ? (
+          <div className="py-6 text-center">
+            <p className="text-sm text-muted">Ngày này chưa phát sinh thu chi.</p>
+            <Button
+              variant="primary"
+              className="mt-4"
+              onClick={() => {
+                setSelectedDay(null);
+                openAssistant();
+              }}
+            >
+              <Plus className="w-4 h-4" aria-hidden="true" />
+              <span>Thêm giao dịch</span>
+            </Button>
+          </div>
+        ) : (
+          <>
+            <ul className="divide-y divide-rule -mt-3">
+              {selectedDayTransactions.map((tx) => (
+                <TransactionRow
                   key={tx.id}
-                  className="p-3.5 rounded-2xl bg-neutral-100/70 dark:bg-neutral-800/60 border border-neutral-200/60 dark:border-white/5 flex items-center justify-between"
-                >
-                  <div className="flex items-center gap-3">
-                    <div
-                      className="w-10 h-10 rounded-xl flex items-center justify-center text-white shrink-0 shadow-sm"
-                      style={{ backgroundColor: cat?.color || '#64748b' }}
-                    >
-                      <IconRenderer name={cat?.icon || 'CircleDot'} className="w-5 h-5" />
-                    </div>
-
-                    <div>
-                      <p className="text-sm font-semibold text-neutral-900 dark:text-white">
-                        {tx.note || cat?.name}
-                      </p>
-                      <p className="text-xs text-neutral-500 dark:text-neutral-400 mt-0.5">
-                        {wallet?.name} {tx.time ? `• ${tx.time}` : ''}
-                      </p>
-                    </div>
-                  </div>
-
-                  <div className="text-right">
-                    <p
-                      className={`text-sm font-bold font-mono ${
-                        isIncome ? 'text-emerald-600 dark:text-emerald-400' : 'text-rose-600 dark:text-rose-400'
-                      }`}
-                    >
-                      {isIncome ? '+' : '-'}{formatCurrency(tx.amount, tx.currency)}
-                    </p>
-                    {tx.currency !== 'VND' && (
-                      <p className="text-[11px] font-mono text-neutral-400">
-                        ≈ {formatCurrency(tx.amountVnd, 'VND')}
-                      </p>
-                    )}
-                  </div>
-                </div>
-              );
-            })
-          )}
-        </div>
+                  tx={tx}
+                  category={categories.find((c) => c.id === tx.categoryId)}
+                  wallet={wallets.find((w) => w.id === tx.walletId)}
+                  showDate={false}
+                />
+              ))}
+            </ul>
+            {(
+              <p className="figure mt-3 border-t border-rule pt-3 text-right text-sm text-muted">
+                Tổng trong ngày:{' '}
+                <span className="font-bold text-ink">
+                  {formatCurrency(
+                    selectedDayTransactions.reduce(
+                      (sum, tx) => sum + (tx.type === 'income' ? tx.amountVnd : -tx.amountVnd),
+                      0
+                    ),
+                    'VND'
+                  )}
+                </span>
+              </p>
+            )}
+          </>
+        )}
       </Modal>
     </div>
   );

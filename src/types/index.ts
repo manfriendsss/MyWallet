@@ -2,7 +2,8 @@
 
 export type TransactionType = 'income' | 'expense';
 
-export type CurrencyCode = 'VND' | 'USD' | 'PLN' | 'EUR' | 'GBP' | 'JPY';
+/** ISO 4217 code: VND, USD, EUR, CNY, JPY, PLN, CZK… any currency with an online rate */
+export type CurrencyCode = string;
 
 export interface Wallet {
   id: string;
@@ -42,13 +43,10 @@ export interface Transaction {
 }
 
 export interface ExchangeRates {
-  VND: number;
-  USD: number;
-  PLN: number;
-  EUR: number;
-  GBP: number;
-  JPY: number;
+  /** How many VND one unit of each currency buys. VND itself is 1. */
+  rates: Record<string, number>;
   lastUpdated: string;
+  source?: 'default' | 'live';
 }
 
 export type AiProvider = 'gemini' | 'deepseek';
@@ -59,8 +57,10 @@ export interface AiSettings {
   geminiModel: string;
   deepseekApiKey: string;
   deepseekModel: string;
-  useCloudflareProxy?: boolean;
-  cloudflareWorkerUrl?: string;
+  /** false: API keys live in sessionStorage and vanish when the tab closes */
+  rememberKeys: boolean;
+  /** 'server': keys are Cloudflare secrets and calls go through /api/ai/*; 'browser': keys typed in the app */
+  keySource: 'server' | 'browser';
 }
 
 export interface ParsedTransactionFromAi {

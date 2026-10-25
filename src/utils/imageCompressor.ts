@@ -13,11 +13,22 @@ export interface CompressedImageResult {
   originalSizeBytes: number;
 }
 
+export const ACCEPTED_IMAGE_TYPES = ['image/jpeg', 'image/png', 'image/webp', 'image/heic', 'image/heif'];
+export const MAX_IMAGE_BYTES = 15 * 1024 * 1024;
+
 export async function compressImageToWebP(
   file: File | Blob,
   maxDimension: number = 1600,
   quality: number = 0.85
 ): Promise<CompressedImageResult> {
+  // Refuse non-images and huge files before decoding them into memory
+  if (!ACCEPTED_IMAGE_TYPES.includes(file.type)) {
+    throw new Error('Chỉ nhận ảnh JPG, PNG, WebP hoặc HEIC.');
+  }
+  if (file.size > MAX_IMAGE_BYTES) {
+    throw new Error(`Ảnh lớn hơn ${MAX_IMAGE_BYTES / 1024 / 1024} MB. Hãy chụp lại hoặc cắt bớt.`);
+  }
+
   return new Promise((resolve, reject) => {
     const originalSizeBytes = file.size;
     const reader = new FileReader();

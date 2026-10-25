@@ -1,26 +1,38 @@
-import React, { useState } from 'react';
-import { Plus, CreditCard, Edit2, Globe, Landmark, Wallet as WalletIcon, Check } from 'lucide-react';
+import React, { useMemo, useState } from 'react';
+import { Plus, CreditCard, Pencil, Globe, Landmark, Wallet as WalletIcon } from 'lucide-react';
 import { useWallet } from '../../context/WalletContext';
-import { Card } from '../ui/Card';
+import { Card, CardHeader } from '../ui/Card';
 import { Modal } from '../ui/Modal';
 import { Button } from '../ui/Button';
+import { Swatches, ColorTile } from '../ui/Swatches';
 import type { CurrencyCode, Wallet } from '../../types';
 import { formatCurrency } from '../../utils/formatters';
-import { convertToVnd } from '../../services/currency';
+import { convertToVnd, getCurrencyOptions } from '../../services/currency';
+import { Select } from '../ui/Select';
+import { CARD_ART } from '../../assets/cards';
+import { cn } from '../../utils/cn';
+
+const WALLET_ICONS: Record<string, React.ElementType> = {
+  Wallet: WalletIcon,
+  Landmark,
+  CreditCard,
+  Globe,
+};
 
 export const WalletsCard: React.FC = () => {
-  const { wallets, addWallet, updateWallet, exchangeRates, isBalanceHidden } = useWallet();
+  const { wallets, addWallet, updateWallet, exchangeRates } = useWallet();
 
   // State for Add Wallet Modal
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
   const [name, setName] = useState('');
   const [currency, setCurrency] = useState<CurrencyCode>('VND');
   const [initialBalance, setInitialBalance] = useState('');
-  const [color, setColor] = useState('#10b981');
+  const [color, setColor] = useState('#f97316');
   const [icon, setIcon] = useState('Wallet');
 
-  // State for Edit Initial Balance Modal
+  // State for Edit Wallet Modal: display name and opening balance
   const [editingWallet, setEditingWallet] = useState<Wallet | null>(null);
+  const [editName, setEditName] = useState('');
   const [editInitialBalance, setEditInitialBalance] = useState('');
 
   const handleCreateWallet = (e: React.FormEvent) => {
@@ -28,7 +40,7 @@ export const WalletsCard: React.FC = () => {
     if (!name.trim()) return;
 
     addWallet({
-      name: name.trim(),
+      name: name.trim().slice(0, 60),
       currency,
       initialBalance: parseFloat(initialBalance) || 0,
       color,
@@ -40,234 +52,190 @@ export const WalletsCard: React.FC = () => {
     setIsAddModalOpen(false);
   };
 
-  const handleUpdateBalance = (e: React.FormEvent) => {
+  const startEdit = (wallet: Wallet) => {
+    setEditingWallet(wallet);
+    setEditName(wallet.name);
+    setEditInitialBalance(String(wallet.initialBalance));
+  };
+
+  const handleUpdateWallet = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!editingWallet) return;
+    if (!editingWallet || !editName.trim()) return;
 
     updateWallet(editingWallet.id, {
+      name: editName.trim().slice(0, 60),
       initialBalance: parseFloat(editInitialBalance) || 0,
     });
 
     setEditingWallet(null);
   };
 
-  const colorOptions = ['#10b981', '#3b82f6', '#0284c7', '#8b5cf6', '#ec4899', '#f97316', '#dc2626'];
+  const currencyOptions = useMemo(() => getCurrencyOptions(exchangeRates), [exchangeRates]);
+
+  const colorOptions =['#f97316', '#ea580c', '#10b981', '#16a34a', '#3b82f6', '#8b5cf6', '#ec4899', '#dc2626'];
   const iconOptions = [
-    { id: 'Wallet', label: 'Ví', icon: WalletIcon },
-    { id: 'Landmark', label: 'Ngân hàng', icon: Landmark },
-    { id: 'CreditCard', label: 'Thẻ / PayPal', icon: CreditCard },
-    { id: 'Globe', label: 'Quốc tế', icon: Globe },
+    { id: 'Wallet', label: 'Ví' },
+    { id: 'Landmark', label: 'Ngân hàng' },
+    { id: 'CreditCard', label: 'Thẻ' },
+    { id: 'Globe', label: 'Quốc tế' },
   ];
 
   return (
-    <Card className="flex flex-col justify-between">
-      <div>
-        {/* Card Header */}
-        <div className="flex items-center justify-between pb-4 border-b border-neutral-100 dark:border-white/5">
-          <div className="flex items-center gap-2.5">
-            <div className="w-8 h-8 rounded-xl bg-emerald-500/10 dark:bg-emerald-500/20 text-emerald-600 dark:text-emerald-400 flex items-center justify-center font-bold">
-              <CreditCard className="w-4 h-4" />
-            </div>
-            <div>
-              <h3 className="text-base font-bold text-neutral-900 dark:text-white">
-                Nguồn Tiền &bull; Ví ({wallets.length})
-              </h3>
-              <p className="text-xs text-neutral-500 dark:text-neutral-400">
-                Đa ngoại tệ tự động quy đổi VNĐ
-              </p>
-            </div>
-          </div>
+    <Card aria-labelledby="wallets-heading" className="flex flex-col">
+      <CardHeader
+        id="wallets-heading"
+        title={`Nguồn tiền (${wallets.length})`}
+        art={CARD_ART.wallets}
+        action={
+          <Button variant="outline" size="sm" onClick={() => setIsAddModalOpen(true)}>
+            <Plus className="w-4 h-4" aria-hidden="true" />
+            <span>Thêm ví</span>
+          </Button>
+        }
+      />
 
-          <button
-            onClick={() => setIsAddModalOpen(true)}
-            className="flex items-center gap-1 text-xs font-semibold px-2.5 py-1.5 rounded-lg bg-emerald-50 dark:bg-emerald-950/40 text-emerald-600 dark:text-emerald-400 border border-emerald-200 dark:border-emerald-800/60 hover:bg-emerald-100 transition-colors cursor-pointer"
-          >
-            <Plus className="w-3.5 h-3.5" />
-            <span>Thêm nguồn tiền</span>
-          </button>
+      {wallets.length === 0 ? (
+        <div className="py-10 text-center">
+          <p className="text-sm font-semibold text-ink">Chưa có nguồn tiền nào</p>
+          <p className="mt-1 text-sm text-muted">Thêm ví tiền mặt hoặc tài khoản ngân hàng để bắt đầu.</p>
         </div>
-
-        {/* Wallets List */}
-        <div className="space-y-3 pt-4">
+      ) : (
+        <ul className="divide-y divide-rule border-t border-rule">
           {wallets.map((wallet) => {
             const { amountVnd } = convertToVnd(wallet.currentBalance, wallet.currency, exchangeRates);
             const isForeign = wallet.currency !== 'VND';
+            const Icon = WALLET_ICONS[wallet.icon] ?? WalletIcon;
 
             return (
-              <div
-                key={wallet.id}
-                className="group p-3.5 rounded-2xl bg-neutral-50/80 dark:bg-neutral-900/60 border border-neutral-200/60 dark:border-white/5 hover:border-emerald-500/30 transition-all duration-200 flex items-center justify-between"
-              >
-                <div className="flex items-center gap-3">
-                  <div
-                    className="w-10 h-10 rounded-xl flex items-center justify-center text-white font-bold shadow-sm"
-                    style={{ backgroundColor: wallet.color }}
-                  >
-                    {wallet.icon === 'Landmark' ? (
-                      <Landmark className="w-5 h-5" />
-                    ) : wallet.icon === 'CreditCard' ? (
-                      <CreditCard className="w-5 h-5" />
-                    ) : wallet.icon === 'Globe' ? (
-                      <Globe className="w-5 h-5" />
-                    ) : (
-                      <WalletIcon className="w-5 h-5" />
-                    )}
-                  </div>
+              <li key={wallet.id} className="flex items-center gap-3 py-3">
+                <ColorTile color={wallet.color}>
+                  <Icon className="w-[18px] h-[18px]" />
+                </ColorTile>
 
-                  <div>
-                    <div className="flex items-center gap-2">
-                      <span className="text-sm font-semibold text-neutral-900 dark:text-white">
-                        {wallet.name}
-                      </span>
-                      <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-md bg-neutral-200 dark:bg-neutral-800 text-neutral-600 dark:text-neutral-300">
-                        {wallet.currency}
-                      </span>
-                    </div>
-                    <div className="flex items-center gap-2 text-xs text-neutral-500 dark:text-neutral-400 mt-0.5">
-                      <span>Đầu kỳ: {formatCurrency(wallet.initialBalance, wallet.currency)}</span>
-                      <button
-                        onClick={() => {
-                          setEditingWallet(wallet);
-                          setEditInitialBalance(String(wallet.initialBalance));
-                        }}
-                        className="opacity-0 group-hover:opacity-100 text-neutral-400 hover:text-emerald-500 transition-opacity p-0.5"
-                        title="Chỉnh sửa số dư ban đầu"
-                      >
-                        <Edit2 className="w-3 h-3" />
-                      </button>
-                    </div>
-                  </div>
+                <div className="min-w-0 flex-1">
+                  <p className="flex items-center gap-2 text-sm font-semibold text-ink">
+                    <span className="truncate">{wallet.name}</span>
+                    <span className="hidden sm:inline shrink-0 rounded-chip bg-paper-3 px-1.5 text-xs font-semibold text-muted">
+                      {wallet.currency}
+                    </span>
+                  </p>
+                  <p className="figure mt-0.5 truncate text-xs text-muted">
+                    Đầu kỳ {formatCurrency(wallet.initialBalance, wallet.currency)}
+                  </p>
                 </div>
 
                 <div className="text-right">
-                  <p className="text-sm font-bold font-mono text-neutral-900 dark:text-white">
-                    {isBalanceHidden
-                      ? '••••••'
-                      : formatCurrency(wallet.currentBalance, wallet.currency)}
-                  </p>
-                  {isForeign && (
-                    <p className="text-[11px] font-mono text-emerald-600 dark:text-emerald-400 font-medium">
-                      {isBalanceHidden ? '••••••' : `≈ ${formatCurrency(amountVnd, 'VND')}`}
-                    </p>
-                  )}
+                  <p className="figure text-sm font-bold text-ink">{formatCurrency(wallet.currentBalance, wallet.currency)}</p>
+                  {isForeign && <p className="figure text-xs text-muted">≈ {formatCurrency(amountVnd, 'VND')}</p>}
                 </div>
-              </div>
+
+                <button
+                  type="button"
+                  onClick={() => startEdit(wallet)}
+                  className="-mr-2 grid h-10 w-10 shrink-0 place-items-center rounded-control text-muted hover:bg-paper-3 hover:text-ink transition-colors"
+                  aria-label={`Sửa ${wallet.name}`}
+                  title="Sửa nguồn tiền"
+                >
+                  <Pencil className="w-4 h-4" aria-hidden="true" />
+                </button>
+              </li>
             );
           })}
-        </div>
-      </div>
+        </ul>
+      )}
 
       {/* Modal: Thêm nguồn tiền mới */}
       <Modal
         isOpen={isAddModalOpen}
         onClose={() => setIsAddModalOpen(false)}
-        title="Thêm Nguồn Tiền Mới"
-        description="Quản lý ví tiền mặt, tài khoản ngân hàng, PayPal, ngoại tệ"
+        title="Thêm nguồn tiền"
+        description="Ví tiền mặt, tài khoản ngân hàng, PayPal hoặc tài khoản ngoại tệ."
       >
-        <form onSubmit={handleCreateWallet} className="space-y-4">
+        <form onSubmit={handleCreateWallet} className="space-y-5">
           <div>
-            <label className="block text-xs font-semibold text-neutral-700 dark:text-neutral-300 mb-1.5">
-              Tên nguồn tiền / Ví
+            <label htmlFor="wallet-name" className="label">
+              Tên nguồn tiền
             </label>
             <input
+              id="wallet-name"
+              name="walletName"
               type="text"
               required
-              placeholder="VD: Techcombank, PayPal USD, Thẻ Ba Lan..."
+              maxLength={60}
+              autoComplete="off"
+              data-autofocus
+              placeholder="Techcombank, PayPal USD…"
               value={name}
               onChange={(e) => setName(e.target.value)}
-              className="w-full px-3.5 py-2.5 rounded-xl bg-neutral-100 dark:bg-neutral-800 border border-neutral-300 dark:border-neutral-700 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500"
+              className="field"
             />
           </div>
 
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div>
-              <label className="block text-xs font-semibold text-neutral-700 dark:text-neutral-300 mb-1.5">
-                Loại tiền tệ
+              <label htmlFor="wallet-currency" className="label">
+                Loại tiền
               </label>
-              <select
+              <Select
+                id="wallet-currency"
                 value={currency}
-                onChange={(e) => setCurrency(e.target.value as CurrencyCode)}
-                className="w-full px-3.5 py-2.5 rounded-xl bg-neutral-100 dark:bg-neutral-800 border border-neutral-300 dark:border-neutral-700 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500"
-              >
-                <option value="VND">VNĐ (Việt Nam)</option>
-                <option value="USD">USD (Mỹ / PayPal)</option>
-                <option value="PLN">PLN (Złoty Ba Lan)</option>
-                <option value="EUR">EUR (Châu Âu)</option>
-                <option value="GBP">GBP (Bảng Anh)</option>
-                <option value="JPY">JPY (Yên Nhật)</option>
-              </select>
+                options={currencyOptions}
+                onChange={(v) => setCurrency(v as CurrencyCode)}
+                searchable
+                searchPlaceholder="Tìm mã hoặc tên tiền…"
+              />
             </div>
 
             <div>
-              <label className="block text-xs font-semibold text-neutral-700 dark:text-neutral-300 mb-1.5">
+              <label htmlFor="wallet-initial" className="label">
                 Số dư ban đầu ({currency})
               </label>
               <input
+                id="wallet-initial"
+                name="initialBalance"
                 type="number"
+                inputMode="decimal"
                 step="any"
                 placeholder="0"
                 value={initialBalance}
                 onChange={(e) => setInitialBalance(e.target.value)}
-                className="w-full px-3.5 py-2.5 rounded-xl bg-neutral-100 dark:bg-neutral-800 border border-neutral-300 dark:border-neutral-700 text-sm font-mono focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                className="field figure"
               />
             </div>
           </div>
 
-          {/* Chọn Icon */}
-          <div>
-            <label className="block text-xs font-semibold text-neutral-700 dark:text-neutral-300 mb-1.5">
-              Biểu tượng
-            </label>
-            <div className="grid grid-cols-4 gap-2">
+          <fieldset>
+            <legend className="label">Biểu tượng</legend>
+            <div role="radiogroup" aria-label="Biểu tượng" className="grid grid-cols-4 gap-2">
               {iconOptions.map((opt) => {
-                const IconComponent = opt.icon;
+                const IconComponent = WALLET_ICONS[opt.id];
                 const isSelected = icon === opt.id;
                 return (
                   <button
                     key={opt.id}
                     type="button"
+                    role="radio"
+                    aria-checked={isSelected}
                     onClick={() => setIcon(opt.id)}
-                    className={`flex flex-col items-center gap-1 p-2 rounded-xl border text-xs transition-colors cursor-pointer ${
+                    className={cn(
+                      'flex flex-col items-center justify-center gap-1 h-16 rounded-control border text-xs font-semibold transition-colors',
                       isSelected
-                        ? 'border-emerald-500 bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 font-bold'
-                        : 'border-neutral-200 dark:border-neutral-700 text-neutral-600 dark:text-neutral-400'
-                    }`}
+                        ? 'border-accent bg-accent-soft text-ink'
+                        : 'border-rule-strong text-muted hover:text-ink hover:bg-paper-2'
+                    )}
                   >
-                    <IconComponent className="w-5 h-5" />
+                    <IconComponent className="w-5 h-5" aria-hidden="true" />
                     <span>{opt.label}</span>
                   </button>
                 );
               })}
             </div>
-          </div>
+          </fieldset>
 
-          {/* Chọn Màu sắc */}
-          <div>
-            <label className="block text-xs font-semibold text-neutral-700 dark:text-neutral-300 mb-1.5">
-              Màu sắc nhận diện
-            </label>
-            <div className="flex items-center gap-2">
-              {colorOptions.map((c) => (
-                <button
-                  key={c}
-                  type="button"
-                  onClick={() => setColor(c)}
-                  className="w-7 h-7 rounded-full flex items-center justify-center transition-transform hover:scale-110 cursor-pointer"
-                  style={{ backgroundColor: c }}
-                >
-                  {color === c && <Check className="w-3.5 h-3.5 text-white stroke-[3]" />}
-                </button>
-              ))}
-            </div>
-          </div>
+          <Swatches label="Màu nhận diện" colors={colorOptions} value={color} onChange={setColor} />
 
-          <div className="flex gap-2 pt-3">
-            <Button
-              type="button"
-              variant="outline"
-              onClick={() => setIsAddModalOpen(false)}
-              className="flex-1"
-            >
+          <div className="flex gap-2 pt-2">
+            <Button variant="outline" onClick={() => setIsAddModalOpen(false)} className="flex-1">
               Hủy
             </Button>
             <Button type="submit" variant="primary" className="flex-1">
@@ -277,35 +245,51 @@ export const WalletsCard: React.FC = () => {
         </form>
       </Modal>
 
-      {/* Modal: Chỉnh sửa số dư ban đầu */}
+      {/* Modal: Sửa nguồn tiền */}
       <Modal
         isOpen={Boolean(editingWallet)}
         onClose={() => setEditingWallet(null)}
-        title={`Sửa Số Dư Ban Đầu: ${editingWallet?.name}`}
-        description="Hệ thống sẽ tự động cập nhật số dư khả dụng hiện tại tương ứng"
+        title="Sửa nguồn tiền"
+        description="Số dư hiện tại được tính lại từ số dư đầu kỳ cộng các giao dịch."
       >
-        <form onSubmit={handleUpdateBalance} className="space-y-4">
+        <form onSubmit={handleUpdateWallet} className="space-y-5">
           <div>
-            <label className="block text-xs font-semibold text-neutral-700 dark:text-neutral-300 mb-1.5">
-              Số dư ban đầu ({editingWallet?.currency})
+            <label htmlFor="wallet-edit-name" className="label">
+              Tên hiển thị
             </label>
             <input
+              id="wallet-edit-name"
+              name="walletName"
+              type="text"
+              required
+              maxLength={60}
+              autoComplete="off"
+              data-autofocus
+              value={editName}
+              onChange={(e) => setEditName(e.target.value)}
+              className="field"
+            />
+          </div>
+
+          <div>
+            <label htmlFor="wallet-edit-initial" className="label">
+              Số dư đầu kỳ ({editingWallet?.currency})
+            </label>
+            <input
+              id="wallet-edit-initial"
+              name="initialBalance"
               type="number"
+              inputMode="decimal"
               step="any"
               required
               value={editInitialBalance}
               onChange={(e) => setEditInitialBalance(e.target.value)}
-              className="w-full px-3.5 py-2.5 rounded-xl bg-neutral-100 dark:bg-neutral-800 border border-neutral-300 dark:border-neutral-700 text-sm font-mono focus:outline-none focus:ring-2 focus:ring-emerald-500"
+              className="field figure"
             />
           </div>
 
-          <div className="flex gap-2 pt-2">
-            <Button
-              type="button"
-              variant="outline"
-              onClick={() => setEditingWallet(null)}
-              className="flex-1"
-            >
+          <div className="flex gap-2">
+            <Button variant="outline" onClick={() => setEditingWallet(null)} className="flex-1">
               Hủy
             </Button>
             <Button type="submit" variant="primary" className="flex-1">

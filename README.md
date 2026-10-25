@@ -4,58 +4,63 @@
   <img src="public/logo.webp" alt="MyWallet Logo" width="128" />
 </p>
 
-**MyWallet** là ứng dụng web & PWA tài chính cá nhân thế hệ mới, kết hợp trải nghiệm thiết kế Bento Grid hiện đại, quản lý đa ngoại tệ với tỷ giá tự động và trợ lý AI thông minh (Gemini & DeepSeek) phân tích giao dịch bằng giọng nói, văn bản hoặc ảnh chụp hóa đơn.
+**MyWallet** là ứng dụng web & PWA tài chính cá nhân, kết hợp giao diện Bento Grid hiện đại, quản lý đa tiền tệ với tỷ giá tự động và trợ lý AI (Gemini & DeepSeek) ghi giao dịch bằng giọng nói, văn bản hoặc ảnh chụp hóa đơn.
 
 ---
 
-## 🌟 Tính Năng Nổi Bật
+## Tính năng nổi bật
 
-### 1. 🤖 Trợ Lý Chi Tiêu AI Tinh Gọn (Voice, Chat, Bill OCR)
-- **Voice-to-Expense**: Bấm nút micro để nói trực tiếp bằng tiếng Việt (Web Speech API).
-- **Bill OCR**: Chụp ảnh hoặc tải hóa đơn lên, hệ thống tự động nén sang **WebP chất lượng 85%**, AI đọc bóc tách chi tiết.
-- **AI Phản Hồi Ngắn Gọn**: Khóa chặt bot không chào hỏi lan man hay đưa lời khuyên sáo rỗng. Bot chỉ báo kết quả 1 câu ngắn: *"Đã phân loại: Chi tiêu 65.000 đ (Ăn uống) từ Ví tiền mặt."*
-- **Sửa Lại Linh Hoạt**: Hiển thị thẻ xem trước giao dịch; người dùng có thể chat tiếp để yêu cầu AI sửa lại ngay trên cửa sổ chat.
-- **Bảo Mật Cao**: Tùy chọn lưu API Key cục bộ mã hóa hoặc thông qua Cloudflare Worker Secret Proxy.
+### 1. Trợ lý chi tiêu AI (giọng nói, chat, ảnh hóa đơn)
+- **Giọng nói**: bấm micro để nói tiếng Việt (Web Speech API, `vi-VN`).
+- **Ảnh hóa đơn**: chụp hoặc tải ảnh lên, ảnh được nén sang **WebP chất lượng 85%** rồi Gemini đọc và bóc tách.
+- **Phản hồi ngắn gọn**: bot chỉ trả lời một câu, ví dụ *"Đã phân loại: Chi tiêu 65.000 đ (Ăn uống) từ Ví tiền mặt."*
+- **Xem trước và sửa lại**: hiển thị thẻ xem trước trước khi lưu; chat tiếp để yêu cầu AI chỉnh sửa.
+- **Chạy được khi không có key**: câu đơn giản vẫn được phân tích bằng bộ phân tích có sẵn trên thiết bị.
+- **Nhà cung cấp và mô hình**:
+  - Gemini: `gemini-3.8-flash` (mặc định), ngoài ra có 3.7 và 3.6 Flash.
+  - DeepSeek: `deepseek-flash` (V4.1 Flash, mặc định) và `deepseek-v4-pro`.
+- **Hai cách giữ API key** (Cài đặt → Trợ lý AI → Nơi giữ API key):
+  - **Máy chủ Cloudflare** (khuyến nghị): key là bí mật của Cloudflare. App gọi `/api/ai/gemini` và `/api/ai/deepseek` (Cloudflare Pages Function tại `functions/api/ai/[provider].ts`), trình duyệt không bao giờ thấy key. Chỉ người đã đăng nhập qua Cloudflare Access và có email trong `ALLOWED_EMAILS` mới gọi được; hàm xác minh JWT của Access (chữ ký, audience, issuer, hạn dùng).
+  - **Trình duyệt này**: key lưu cục bộ, **không được mã hóa**, có thể chọn chỉ lưu trong phiên.
 
-### 2. 💱 Quản Lý Đa Ngoại Tệ & Tự Động Quy Đổi VNĐ
-- Hỗ trợ nguồn tiền đa dạng: **VND, USD (PayPal), PLN (Złoty Ba Lan), EUR, GBP, JPY**.
-- Tự động lấy tỷ giá mới nhất và quy đổi về **VNĐ** để hiển thị tổng số dư và dashboard.
-- Cho phép chỉnh sửa tỷ giá thủ công hoặc làm mới trực tuyến bất cứ lúc nào.
+### 2. Đa tiền tệ với tỷ giá tự động
+- Hỗ trợ mọi loại tiền tệ (~166) với tỷ giá trực tiếp từ open.er-api.com, làm mới khi mở app và sau mỗi 6 giờ; không cần chỉnh tỷ giá thủ công.
+- Số tiền luôn viết đầy đủ kèm ký hiệu tiền tệ, VND hiển thị là "đ" (ví dụ `2.175.000 đ`, `$585`, `735 zł`). Ngày theo dạng dd/mm/yyyy.
 
-### 3. 📊 Dashboard Bento Grid Sang Trọng
-- **Tổng số dư khả dụng**: Card kích thước lớn với hiệu ứng ánh sáng gradient, nút ẩn/hiện số dư bảo mật, thống kê tổng thu - tổng chi tháng.
-- **Nguồn tiền (Ví)**: Quản lý số dư ban đầu, thêm ví mới, xem số tiền gốc và số quy đổi VNĐ.
-- **10 Giao dịch gần nhất**: Lọc nhanh theo Tất cả, Thu nhập, Chi tiêu.
-- **Danh mục Thu & Chi**: 2 Tab phân biệt rõ ràng, grid các sub-card nhỏ hiển thị chi tiêu tháng, card viền nét đứt `+` để thêm danh mục mới.
+### 3. Dashboard Bento Grid
+- **Tổng số dư**: kèm thu, chi và chênh lệch của tháng này.
+- **Nguồn tiền (Ví)**: thêm ví, sửa tên và số dư ban đầu.
+- **10 giao dịch gần nhất**: tab lọc full-width có hiệu ứng (Tất cả màu cam, Thu màu xanh, Chi màu đỏ); xóa giao dịch với xác nhận ngay tại chỗ.
+- **Danh mục**: thêm và sửa tên, biểu tượng, màu sắc.
 
-### 4. 📅 Lịch Thu Chi Trực Quan
-- Lịch tháng với hiệu ứng chuyển động mượt mà (Framer Motion).
-- Hiển thị trực quan con số **Thu nhập (+)** màu xanh và **Chi tiêu (-)** màu đỏ ngay trên từng ô ngày.
-- Bấm vào ngày để xem danh sách chi tiết các giao dịch trong ngày đó.
+### 4. Lịch thu chi
+- Lịch tháng hiển thị số tiền **+** / **−** theo ngày (dạng chấm trên điện thoại); bấm vào ngày để xem chi tiết.
 
-### 5. 📈 Thống Kê & Báo Cáo Chuyên Sâu
-- Thống kê theo: **Ngày**, **Tuần**, **Tháng**, **Năm**.
-- Xác định ngay danh mục chiếm tỷ trọng chi tiêu lớn nhất.
-- Thanh tiến trình trực quan cơ cấu chi tiêu.
+### 5. Thống kê
+- Theo **ngày**, **tuần**, **tháng**, **năm**, với thanh tỷ trọng theo từng danh mục.
 
-### 6. 📱 PWA & Tối Ưu Trải Nghiệm Di Động
-- Chống pinch-to-zoom (`user-scalable=no, maximum-scale=1.0`).
-- Ẩn hoàn toàn thanh cuộn thô kệch (`no-scrollbar`).
-- Bottom Navigation Bar 5 nút trên mobile với nút (+) mở Bottom Sheet Trợ lý AI ở giữa.
-- Lazy load, code-splitting (tách nhỏ components, bundle siêu nhẹ).
+### 6. Giao diện và trải nghiệm
+- Bảng màu chủ đạo cam kèm điểm nhấn xanh lá từ logo; chế độ sáng và tối (xám than dịu, không dùng đen/trắng tuyệt đối); ánh sáng nền, hình minh họa.
+- Dropdown tùy biến có tìm kiếm, skeleton loading theo từng màn hình, màn hình tải lười (lazy-load) kèm prefetch khi rảnh.
+- Thanh điều hướng dưới trên di động với nút + dạng khoét gradient. Cho phép phóng to (hỗ trợ tiếp cận).
 
----
-
-## 🛠️ Công Nghệ Sử Dụng
-
-- **Frontend**: React 19, TypeScript, Vite, Tailwind CSS v4, Lucide Icons, Framer Motion.
-- **Xử lý ảnh**: Canvas WebP 85 compression.
-- **AI Engine**: Google Gemini API (`gemini-2.5-flash`), DeepSeek API (`deepseek-chat`) + Local Regex Fallback.
-- **Backend / Deployment**: Cloudflare Workers, Cloudflare D1 (SQL Database), Cloudflare R2 (Object Storage).
+### 7. Bảo mật
+- CSP và các header bảo mật (`public/_headers`, cùng thẻ CSP meta tạo lúc build trong `vite.config.ts`).
+- Key gửi qua header, không bao giờ nằm trên URL; phản hồi từ AI và tỷ giá đều được kiểm tra hợp lệ.
+- Dữ liệu nằm trong `localStorage` của trình duyệt; có xuất bản sao lưu JSON.
 
 ---
 
-## 🚀 Hướng Dẫn Cài Đặt & Phát Triển Cục Bộ
+## Công nghệ sử dụng
+
+- **Frontend**: React 19, TypeScript, Vite, Tailwind CSS v4, Framer Motion, Lucide, date-fns.
+- **Xử lý ảnh**: nén WebP 85 bằng Canvas.
+- **AI**: Google Gemini và DeepSeek, cộng bộ phân tích cục bộ dự phòng.
+- **Backend**: Cloudflare Pages + Pages Functions.
+
+---
+
+## Cài đặt và phát triển cục bộ
 
 ```bash
 # 1. Cài đặt dependencies
@@ -68,38 +73,47 @@ npm run dev
 npm run build
 ```
 
+`npm run dev` chỉ chạy giao diện. Để thử route máy chủ ở local, chạy `npm run build` rồi `wrangler pages dev dist`; đặt các bí mật trong file `.dev.vars` (tự tạo, không commit file này).
+
 ---
 
-## ☁️ Triển Khai Lên Cloudflare (Workers, D1, R2)
+## Triển khai lên Cloudflare Pages (giữ API key trên máy chủ)
 
-1. Cài đặt Cloudflare Wrangler CLI:
-   ```bash
-   npm install -g wrangler
-   wrangler login
-   ```
+1. Đăng nhập Wrangler:
+```bash
+npm install -g wrangler
+wrangler login
+```
+2. Build và tạo project Pages (lần đầu):
+```bash
+npm run build
+wrangler pages deploy dist --project-name mywallet
+```
+   Chạy lệnh deploy từ thư mục gốc của repo để Wrangler đóng gói luôn thư mục `functions/`.
+3. Bật Cloudflare Access cho tên miền của app: Cloudflare Dashboard → Zero Trust → Access → Applications → Add an application → Self-hosted, nhập tên miền app (cả `mywallet.pages.dev` và tên miền riêng nếu có), policy Allow với email của bạn, phương thức đăng nhập One-time PIN. Sao chép "Application Audience (AUD) Tag" và tên team (`<team>.cloudflareaccess.com`).
+4. Thêm biến và bí mật cho project:
+```bash
+wrangler pages secret put GEMINI_API_KEY --project-name mywallet
+wrangler pages secret put DEEPSEEK_API_KEY --project-name mywallet
+wrangler pages secret put ACCESS_TEAM_DOMAIN --project-name mywallet
+wrangler pages secret put ACCESS_AUD --project-name mywallet
+wrangler pages secret put ALLOWED_EMAILS --project-name mywallet
+```
+   `ACCESS_TEAM_DOMAIN` ví dụ `yourteam.cloudflareaccess.com`; `ALLOWED_EMAILS` là danh sách email cách nhau bằng dấu phẩy.
+5. Deploy lại (`wrangler pages deploy dist --project-name mywallet`), mở app, vào Cài đặt → Trợ lý AI → Nơi giữ API key → "Máy chủ Cloudflare" → Lưu → Kiểm tra kết nối.
 
-2. Tạo database D1 và chạy migration:
-   ```bash
-   wrangler d1 create mywallet-db
-   wrangler d1 execute mywallet-db --file=./cloudflare/schema.sql
-   ```
+Nếu thiếu một trong các biến Access, máy chủ từ chối mọi yêu cầu (an toàn mặc định). Đặt giới hạn chi tiêu cho key ở Google AI Studio và DeepSeek.
 
-3. Tạo R2 Bucket để lưu ảnh hóa đơn:
-   ```bash
-   wrangler r2 bucket create mywallet-receipts
-   ```
+### Tự động deploy từ GitHub
 
-4. Cài đặt bí mật API Key (không lộ client):
-   ```bash
-   wrangler secret put GEMINI_API_KEY
-   wrangler secret put DEEPSEEK_API_KEY
-   ```
+Mỗi lần push lên nhánh `main`, workflow `.github/workflows/deploy.yml` sẽ chạy và deploy lên project Cloudflare Pages `mywallet`.
 
-5. Deploy toàn bộ frontend và backend:
-   ```bash
-   npm run build
-   cd cloudflare && wrangler deploy
-   ```
+Repository GitHub cần có hai secret:
+
+- `CLOUDFLARE_API_TOKEN`: Cloudflare API token có quyền `Cloudflare Pages: Edit`.
+- `CLOUDFLARE_ACCOUNT_ID`: `73b80a210bebde9342f2e0665beb84d9`.
+
+Website được cấu hình `noindex`, nên sẽ không hiển thị trên các công cụ tìm kiếm.
 
 ---
 

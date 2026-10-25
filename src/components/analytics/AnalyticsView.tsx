@@ -10,22 +10,28 @@ import {
   isWithinInterval,
   parseISO,
 } from 'date-fns';
-import { TrendingUp, PieChart, ArrowUpRight, ArrowDownRight } from 'lucide-react';
 import { useWallet } from '../../context/WalletContext';
-import { Card } from '../ui/Card';
+import { Card, CardHeader } from '../ui/Card';
 import { IconRenderer } from '../ui/IconRenderer';
+import { ColorTile } from '../ui/Swatches';
 import { formatCurrency } from '../../utils/formatters';
+import { CARD_ART } from '../../assets/cards';
 
 type TimeRange = 'day' | 'week' | 'month' | 'year';
 
+const RANGE_LABELS: Record<TimeRange, string> = {
+  day: 'Hôm nay',
+  week: 'Tuần này',
+  month: 'Tháng này',
+  year: 'Năm nay',
+};
+
 export const AnalyticsView: React.FC = () => {
-  const { transactions, categories, isBalanceHidden } = useWallet();
+  const { transactions, categories } = useWallet();
   const [range, setRange] = useState<TimeRange>('month');
 
-  // Filter transactions based on selected range
-  const now = new Date();
-
   const filteredTransactions = useMemo(() => {
+    const now = new Date();
     return transactions.filter((tx) => {
       try {
         const txDate = parseISO(tx.date);
@@ -33,19 +39,13 @@ export const AnalyticsView: React.FC = () => {
           return tx.date === format(now, 'yyyy-MM-dd');
         }
         if (range === 'week') {
-          const start = startOfWeek(now, { weekStartsOn: 1 });
-          const end = endOfWeek(now, { weekStartsOn: 1 });
-          return isWithinInterval(txDate, { start, end });
+          return isWithinInterval(txDate, { start: startOfWeek(now, { weekStartsOn: 1 }), end: endOfWeek(now, { weekStartsOn: 1 }) });
         }
         if (range === 'month') {
-          const start = startOfMonth(now);
-          const end = endOfMonth(now);
-          return isWithinInterval(txDate, { start, end });
+          return isWithinInterval(txDate, { start: startOfMonth(now), end: endOfMonth(now) });
         }
         if (range === 'year') {
-          const start = startOfYear(now);
-          const end = endOfYear(now);
-          return isWithinInterval(txDate, { start, end });
+          return isWithinInterval(txDate, { start: startOfYear(now), end: endOfYear(now) });
         }
         return true;
       } catch {
@@ -76,185 +76,114 @@ export const AnalyticsView: React.FC = () => {
 
     const items = Object.entries(catMap).map(([catId, amount]) => {
       const cat = categories.find((c) => c.id === catId);
-      const percentage = totalExpense > 0 ? Math.round((amount / totalExpense) * 100) : 0;
+      const share = totalExpense > 0 ? amount / totalExpense : 0;
       return {
         id: catId,
         name: cat?.name || 'Chi khác',
         icon: cat?.icon || 'CircleDot',
-        color: cat?.color || '#64748b',
+        color: cat?.color,
         amount,
-        percentage,
+        share,
+        percentage: Math.round(share * 100),
       };
     });
 
-    // Sort descending by amount
     return items.sort((a, b) => b.amount - a.amount);
   }, [filteredTransactions, categories, totalExpense]);
 
-  const topCategory = categoryBreakdown[0];
+  const stats = [
+    { label: 'Tổng thu', value: `+${formatCurrency(totalIncome, 'VND')}`, tone: 'text-income' },
+    { label: 'Tổng chi', value: `−${formatCurrency(totalExpense, 'VND')}`, tone: 'text-expense' },
+    {
+      label: 'Chênh lệch',
+      value: `${netSavings >= 0 ? '+' : ''}${formatCurrency(netSavings, 'VND')}`,
+      tone: netSavings >= 0 ? 'text-ink' : 'text-warn',
+    },
+  ];
 
   return (
     <div className="space-y-6">
-      {/* Header & Range Selector */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-        <div>
-          <h2 className="text-xl sm:text-2xl font-extrabold text-neutral-900 dark:text-white">
-            Thống Kê Chi Tiêu
-          </h2>
-          <p className="text-xs sm:text-sm text-neutral-500 dark:text-neutral-400">
-            Phân tích tỷ trọng và xu hướng dòng tiền
-          </p>
-        </div>
-
-        {/* 4 Tabs: Ngày / Tuần / Tháng / Năm */}
-        <div className="flex items-center bg-neutral-200/80 dark:bg-neutral-900 p-1 rounded-2xl self-start sm:self-auto">
-          {(['day', 'week', 'month', 'year'] as TimeRange[]).map((r) => {
-            const labels: Record<TimeRange, string> = {
-              day: 'Hôm nay',
-              week: 'Tuần này',
-              month: 'Tháng này',
-              year: 'Năm nay',
-            };
-            const isActive = range === r;
-            return (
-              <button
-                key={r}
-                onClick={() => setRange(r)}
-                className={`px-3.5 py-1.5 text-xs font-semibold rounded-xl transition-all cursor-pointer ${
-                  isActive
-                    ? 'bg-white dark:bg-neutral-800 text-neutral-900 dark:text-white shadow-sm font-bold'
-                    : 'text-neutral-500 hover:text-neutral-900 dark:hover:text-white'
-                }`}
-              >
-                {labels[r]}
-              </button>
-            );
-          })}
+      {/* Range Selector */}
+      <div className="flex">
+        <div className="seg w-full sm:w-auto overflow-x-auto no-scrollbar [&>button]:flex-1" role="group" aria-label="Khoảng thời gian">
+          {(Object.keys(RANGE_LABELS) as TimeRange[]).map((r) => (
+            <button key={r} type="button" aria-pressed={range === r} onClick={() => setRange(r)}>
+              {RANGE_LABELS[r]}
+            </button>
+          ))}
         </div>
       </div>
 
-      {/* Summary Cards */}
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-        {/* Thu nhập */}
-        <Card className="p-4 sm:p-5 flex items-center justify-between">
-          <div>
-            <span className="text-xs text-neutral-500 dark:text-neutral-400 font-medium">Tổng Thu Nhập</span>
-            <p className="text-lg sm:text-2xl font-extrabold font-mono text-emerald-600 dark:text-emerald-400 mt-1">
-              {isBalanceHidden ? '••••••' : `+${formatCurrency(totalIncome, 'VND')}`}
-            </p>
-          </div>
-          <div className="w-10 h-10 rounded-2xl bg-emerald-500/10 dark:bg-emerald-500/20 text-emerald-600 dark:text-emerald-400 flex items-center justify-center">
-            <ArrowUpRight className="w-5 h-5" />
-          </div>
-        </Card>
-
-        {/* Chi tiêu */}
-        <Card className="p-4 sm:p-5 flex items-center justify-between">
-          <div>
-            <span className="text-xs text-neutral-500 dark:text-neutral-400 font-medium">Tổng Chi Tiêu</span>
-            <p className="text-lg sm:text-2xl font-extrabold font-mono text-rose-600 dark:text-rose-400 mt-1">
-              {isBalanceHidden ? '••••••' : `-${formatCurrency(totalExpense, 'VND')}`}
-            </p>
-          </div>
-          <div className="w-10 h-10 rounded-2xl bg-rose-500/10 dark:bg-rose-500/20 text-rose-600 dark:text-rose-400 flex items-center justify-center">
-            <ArrowDownRight className="w-5 h-5" />
-          </div>
-        </Card>
-
-        {/* Chênh lệch ròng */}
-        <Card className="p-4 sm:p-5 flex items-center justify-between">
-          <div>
-            <span className="text-xs text-neutral-500 dark:text-neutral-400 font-medium">Thặng Dư Ròng</span>
-            <p
-              className={`text-lg sm:text-2xl font-extrabold font-mono mt-1 ${
-                netSavings >= 0 ? 'text-indigo-600 dark:text-indigo-400' : 'text-amber-500'
-              }`}
-            >
-              {isBalanceHidden
-                ? '••••••'
-                : `${netSavings >= 0 ? '+' : ''}${formatCurrency(netSavings, 'VND')}`}
-            </p>
-          </div>
-          <div className="w-10 h-10 rounded-2xl bg-indigo-500/10 dark:bg-indigo-500/20 text-indigo-600 dark:text-indigo-400 flex items-center justify-center">
-            <TrendingUp className="w-5 h-5" />
-          </div>
-        </Card>
-      </div>
-
-      {/* Highlight Top Category */}
-      {topCategory && (
-        <div className="p-5 rounded-2xl bg-gradient-to-r from-rose-500/10 via-amber-500/10 to-transparent border border-rose-500/20 flex items-center justify-between">
-          <div className="flex items-center gap-3">
+      {/* Summary row */}
+      <Card as="div" className="p-0 sm:p-0">
+        <dl className="grid grid-cols-2 sm:grid-cols-3">
+          {stats.map((stat, i) => (
             <div
-              className="w-12 h-12 rounded-2xl flex items-center justify-center text-white shadow-md"
-              style={{ backgroundColor: topCategory.color }}
+              key={stat.label}
+              className={`relative overflow-hidden p-4 sm:p-5 ${i === 1 ? 'border-l border-rule' : ''} ${i === 2 ? 'col-span-2 sm:col-span-1 border-t sm:border-t-0 sm:border-l border-rule' : ''}`}
             >
-              <IconRenderer name={topCategory.icon} className="w-6 h-6" />
+              {i === 2 && (
+                <img
+                  src={CARD_ART.chart}
+                  alt=""
+                  aria-hidden="true"
+                  decoding="async"
+                  className="card-art -bottom-3 right-2 w-24 opacity-25 dark:opacity-20"
+                />
+              )}
+              <dt className="relative text-sm text-muted">{stat.label}</dt>
+              <dd className={`figure relative mt-1 text-lg sm:text-2xl font-bold ${stat.tone}`}>{stat.value}</dd>
             </div>
-            <div>
-              <span className="text-xs font-semibold text-rose-500 uppercase tracking-wider">
-                Mục Chi Tiêu Nhiều Nhất
-              </span>
-              <h3 className="text-lg font-bold text-neutral-900 dark:text-white mt-0.5">
-                {topCategory.name} &bull; {topCategory.percentage}% tổng chi
-              </h3>
-            </div>
-          </div>
-          <p className="text-lg font-extrabold font-mono text-neutral-900 dark:text-white">
-            {isBalanceHidden ? '••••••' : formatCurrency(topCategory.amount, 'VND')}
-          </p>
-        </div>
-      )}
+          ))}
+        </dl>
+      </Card>
 
-      {/* Category Breakdown Progress Bars */}
-      <Card className="p-6">
-        <div className="flex items-center justify-between pb-4 border-b border-neutral-100 dark:border-white/5">
-          <div className="flex items-center gap-2.5">
-            <PieChart className="w-5 h-5 text-purple-500" />
-            <h3 className="text-base font-bold text-neutral-900 dark:text-white">
-              Cơ Cấu Chi Tiêu Theo Danh Mục
-            </h3>
-          </div>
-          <span className="text-xs text-neutral-400">{categoryBreakdown.length} danh mục</span>
-        </div>
+      {/* Category breakdown */}
+      <Card aria-labelledby="breakdown-heading">
+        <CardHeader
+          id="breakdown-heading"
+          title="Chi tiêu theo danh mục"
+          art={CARD_ART.chart}
+          description={
+            categoryBreakdown[0]
+              ? `Nhiều nhất: ${categoryBreakdown[0].name}, ${categoryBreakdown[0].percentage}% tổng chi`
+              : `${RANGE_LABELS[range]}`
+          }
+        />
 
         {categoryBreakdown.length === 0 ? (
-          <div className="py-12 text-center text-neutral-400 text-sm">
-            Chưa có chi tiêu nào trong khoảng thời gian này
-          </div>
+          <p className="border-t border-rule py-12 text-center text-sm text-muted">
+            Chưa có khoản chi nào trong khoảng thời gian này.
+          </p>
         ) : (
-          <div className="space-y-4 pt-4">
+          <ul className="divide-y divide-rule border-t border-rule">
             {categoryBreakdown.map((item) => (
-              <div key={item.id} className="space-y-1.5">
-                <div className="flex items-center justify-between text-xs sm:text-sm">
-                  <div className="flex items-center gap-2 font-medium text-neutral-800 dark:text-neutral-200">
-                    <span
-                      className="w-3 h-3 rounded-full shrink-0"
-                      style={{ backgroundColor: item.color }}
-                    />
-                    <span>{item.name}</span>
-                  </div>
-                  <div className="flex items-center gap-3 font-mono">
-                    <span className="text-neutral-400">{item.percentage}%</span>
-                    <span className="font-bold text-neutral-900 dark:text-white">
-                      {isBalanceHidden ? '••••••' : formatCurrency(item.amount, 'VND')}
-                    </span>
-                  </div>
+              <li key={item.id} className="py-3">
+                <div className="flex items-center gap-3">
+                  <ColorTile color={item.color} size="sm">
+                    <IconRenderer name={item.icon} className="w-3.5 h-3.5" />
+                  </ColorTile>
+                  <span className="min-w-0 flex-1 truncate text-sm font-semibold text-ink">{item.name}</span>
+                  <span className="figure w-10 text-right text-sm text-muted">{item.percentage}%</span>
+                  <span className="figure min-w-[6.5rem] text-right text-sm font-bold text-ink">
+                    {formatCurrency(item.amount, 'VND')}
+                  </span>
                 </div>
 
-                {/* Progress bar */}
-                <div className="w-full h-2 rounded-full bg-neutral-100 dark:bg-neutral-800 overflow-hidden">
+                {/* Share bar: scaled, never width-animated */}
+                <div
+                  className="mt-2 ml-10 h-1.5 overflow-hidden rounded-full bg-paper-3"
+                  role="img"
+                  aria-label={`${item.name}: ${item.percentage}% tổng chi`}
+                >
                   <div
-                    className="h-full rounded-full transition-all duration-500"
-                    style={{
-                      width: `${item.percentage}%`,
-                      backgroundColor: item.color,
-                    }}
+                    className="h-full w-full origin-left rounded-full transition-transform duration-300"
+                    style={{ transform: `scaleX(${item.share})`, backgroundColor: item.color || 'var(--color-muted)' }}
                   />
                 </div>
-              </div>
+              </li>
             ))}
-          </div>
+          </ul>
         )}
       </Card>
     </div>
