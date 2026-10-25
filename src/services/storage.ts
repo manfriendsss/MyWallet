@@ -34,6 +34,7 @@ export const INITIAL_CATEGORIES: Category[] = [
   { id: 'c-health', name: 'Sức khỏe', type: 'expense', icon: 'HeartPulse', color: '#ef4444' },
   { id: 'c-work', name: 'Công việc & Học tập', type: 'expense', icon: 'GraduationCap', color: '#06b6d4' },
   { id: 'c-other-exp', name: 'Chi khác', type: 'expense', icon: 'CircleEllipsis', color: '#64748b' },
+  { id: 'c-fees', name: 'Phí & lệ phí', type: 'expense', icon: 'Percent', color: '#78716c' },
 
   // Income (Thu nhập)
   { id: 'c-salary', name: 'Lương cố định', type: 'income', icon: 'Briefcase', color: '#10b981' },
@@ -41,6 +42,9 @@ export const INITIAL_CATEGORIES: Category[] = [
   { id: 'c-invest', name: 'Đầu tư & Lãi', type: 'income', icon: 'TrendingUp', color: '#6366f1' },
   { id: 'c-gift', name: 'Quà tặng & Khác', type: 'income', icon: 'Gift', color: '#ec4899' },
 ];
+
+/** Where transfer fees go; created on first use if an account lacks it */
+export const FEE_CATEGORY: Category = { id: 'c-fees', name: 'Phí & lệ phí', type: 'expense', icon: 'Percent', color: '#78716c' };
 
 /** Remove the wallet data cached in this browser (on logout) */
 export function clearLocalWalletData(): void {

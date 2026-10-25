@@ -5,6 +5,7 @@ import type {
   Category,
   ExchangeRates,
   Transaction,
+  TransferOptions,
   Wallet,
 } from '../types';
 import {
@@ -29,6 +30,7 @@ import {
   saveTransactions,
   recalculateWalletBalances,
   INITIAL_CATEGORIES,
+  FEE_CATEGORY,
 } from '../services/storage';
 import { newId, toLocalISODate } from '../utils/date';
 import { dataApi, type SyncKey } from '../services/api';
@@ -58,9 +60,13 @@ interface WalletContextType {
   // Actions
   addTransaction: (tx: Omit<Transaction, 'id' | 'amountVnd' | 'exchangeRate' | 'createdAt'>) => Transaction;
   updateTransaction: (id: string, updates: Partial<Transaction>) => void;
-  deleteTransaction: (id: string) => void;
+  /** Returns what was removed (a transfer takes its fee with it), for undo */
+  deleteTransaction: (id: string) => Transaction[];
+  restoreTransactions: (restored: Transaction[]) => void;
+  /** What arrives in the destination wallet at today's rates */
+  previewTransferAmount: (fromWalletId: string, toWalletId: string, amount: number) => number;
   /** Move money between your own wallets, e.g. paying off a credit card. Never counted as spending. */
-  addTransfer: (fromWalletId: string, toWalletId: string, amount: number, note?: string) => void;
+  addTransfer: (fromWalletId: string, toWalletId: string, amount: number, options?: TransferOptions) => void;
 
   addWallet: (wallet: Omit<Wallet, 'id' | 'currentBalance'>) => Wallet;
   updateWallet: (id: string, updates: Partial<Wallet>) => void;
@@ -293,20 +299,55 @@ export const WalletProvider: React.FC<{ children: React.ReactNode; syncEnabled?:
     syncState(wallets, newTxs);
   };
 
-  const deleteTransaction = (id: string) => {
-    const newTxs = transactions.filter((t) => t.id !== id);
-    syncState(wallets, newTxs);
+  /**
+   * Deletes an entry (and, for a transfer, the fee recorded with it).
+   * Returns what was removed so the caller can offer an undo with restoreTransactions.
+   */
+  const deleteTransaction = (id: string): Transaction[] => {
+    const removed = transactions.filter((t) => t.id === id || t.transferId === id);
+    syncState(wallets, transactions.filter((t) => !removed.includes(t)));
+    return removed;
   };
 
-  const addTransfer = (fromWalletId: string, toWalletId: string, amount: number, note?: string) => {
+  /** Puts back entries removed by deleteTransaction (undo) */
+  const restoreTransactions = (restored: Transaction[]) => {
+    const ids = new Set(transactions.map((t) => t.id));
+    const merged = [...restored.filter((t) => !ids.has(t.id)), ...transactions].sort(
+      (a, b) => b.date.localeCompare(a.date) || (b.time ?? '').localeCompare(a.time ?? '') || b.createdAt.localeCompare(a.createdAt)
+    );
+    syncState(wallets, merged);
+  };
+
+  /** What arrives in `to` when `amount` leaves `from`, at today's rates (PayPal at its own rate) */
+  const previewTransferAmount = (fromWalletId: string, toWalletId: string, amount: number): number => {
+    const from = wallets.find((w) => w.id === fromWalletId);
+    const to = wallets.find((w) => w.id === toWalletId);
+    if (!from || !to || !(amount > 0)) return 0;
+    if (from.currency === to.currency) return amount;
+    const { amountVnd } = convertForWallet(amount, from, exchangeRates);
+    const toRate = convertForWallet(1, to, exchangeRates).rateUsed || 1;
+    return Math.round((amountVnd / toRate) * 100) / 100;
+  };
+
+  /**
+   * Moves money between your own wallets (paying a card, topping up PayPal, cash from an ATM).
+   * The arriving amount can differ from the market conversion (PayPal's rate, the bank's rate):
+   * pass what actually arrived as `toAmount`. A fee is recorded as a separate expense, since it is real spending.
+   */
+  const addTransfer = (fromWalletId: string, toWalletId: string, amount: number, options: TransferOptions = {}) => {
     const from = wallets.find((w) => w.id === fromWalletId);
     const to = wallets.find((w) => w.id === toWalletId);
     if (!from || !to || !(amount > 0) || from.id === to.id) return;
+
     const { amountVnd, rateUsed } = convertForWallet(amount, from, exchangeRates);
-    // Arriving amount in the destination currency, through VND
-    const toRate = convertForWallet(1, to, exchangeRates).rateUsed || 1;
-    const toAmount = to.currency === from.currency ? amount : Math.round((amountVnd / toRate) * 100) / 100;
+    const toAmount =
+      options.toAmount !== undefined && options.toAmount > 0
+        ? options.toAmount
+        : previewTransferAmount(fromWalletId, toWalletId, amount);
     const now = new Date();
+    const date = options.date ?? toLocalISODate(now);
+    const time = now.toTimeString().slice(0, 5);
+
     const transfer: Transaction = {
       id: newId('tx'),
       type: 'transfer',
@@ -318,12 +359,38 @@ export const WalletProvider: React.FC<{ children: React.ReactNode; syncEnabled?:
       toWalletId: to.id,
       toAmount,
       categoryId: '',
-      date: toLocalISODate(now),
-      time: now.toTimeString().slice(0, 5),
-      note: note ?? (to.kind === 'credit' ? `Trả nợ thẻ ${to.name}` : `Chuyển sang ${to.name}`),
+      date,
+      time,
+      note: options.note?.trim() || (to.kind === 'credit' ? `Trả nợ thẻ ${to.name}` : `Chuyển sang ${to.name}`),
       createdAt: now.toISOString(),
     };
-    syncState(wallets, [transfer, ...transactions]);
+
+    const entries: Transaction[] = [transfer];
+    let nextCategories: Category[] | undefined;
+    if (options.fee && options.fee > 0) {
+      let feeCategory = categories.find((c) => c.id === FEE_CATEGORY.id);
+      if (!feeCategory) {
+        feeCategory = FEE_CATEGORY;
+        nextCategories = [...categories, FEE_CATEGORY];
+      }
+      const fee = convertForWallet(options.fee, from, exchangeRates);
+      entries.push({
+        id: newId('tx'),
+        type: 'expense',
+        amount: options.fee,
+        currency: from.currency,
+        amountVnd: fee.amountVnd,
+        exchangeRate: fee.rateUsed,
+        walletId: from.id,
+        categoryId: feeCategory.id,
+        date,
+        time,
+        note: `Phí chuyển sang ${to.name}`,
+        transferId: transfer.id,
+        createdAt: now.toISOString(),
+      });
+    }
+    syncState(wallets, [...entries, ...transactions], nextCategories);
   };
   // Wallets Actions
   const addWallet = (walletData: Omit<Wallet, 'id' | 'currentBalance'>): Wallet => {
@@ -470,6 +537,8 @@ export const WalletProvider: React.FC<{ children: React.ReactNode; syncEnabled?:
         addTransaction,
         updateTransaction,
         deleteTransaction,
+        restoreTransactions,
+        previewTransferAmount,
         addTransfer,
         addWallet,
         updateWallet,

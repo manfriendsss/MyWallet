@@ -33,6 +33,8 @@ export interface Category {
   icon: string;
   color: string;
   isDefault?: boolean;
+  /** Expense categories: monthly spending limit in VND (undefined = no budget) */
+  budget?: number;
 }
 
 export interface Transaction {
@@ -53,8 +55,23 @@ export interface Transaction {
   time?: string; // HH:mm
   note?: string;
   receiptUrl?: string; // photo/bill attachment URL
+  /** Receipt photo stored privately in R2; fetched through /api/receipts/<key> */
+  receiptKey?: string;
+  /** A fee entry created alongside a transfer points back at it */
+  transferId?: string;
   isAiGenerated?: boolean;
   createdAt: string;
+}
+
+/** Options when moving money between your own wallets */
+export interface TransferOptions {
+  /** What actually arrived, in the destination wallet's currency (defaults to the market conversion) */
+  toAmount?: number;
+  /** Fee charged, in the source wallet's currency; recorded as a separate expense under the fees category */
+  fee?: number;
+  note?: string;
+  /** YYYY-MM-DD, defaults to today */
+  date?: string;
 }
 
 export interface ExchangeRates {
@@ -90,4 +107,4 @@ export interface ParsedTransactionFromAi {
   rawText?: string;
 }
 
-export type ActiveTab = 'dashboard' | 'calendar' | 'analytics' | 'settings';
+export type ActiveTab = 'dashboard' | 'calendar' | 'analytics' | 'settings' | 'transactions';
