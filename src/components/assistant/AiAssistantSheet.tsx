@@ -2,6 +2,8 @@ import React, { useState, useRef, useEffect, useId } from 'react';
 import { createPortal } from 'react-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import { PenLine, Mic, MicOff, Send, Camera, X, Check, AlertCircle } from 'lucide-react';
+import { Capacitor } from '@capacitor/core';
+import { Camera as NativeCamera, CameraResultType, CameraSource } from '@capacitor/camera';
 import confetti from 'canvas-confetti';
 import { useWallet } from '../../context/WalletContext';
 import { compressImageToWebP, ACCEPTED_IMAGE_TYPES } from '../../utils/imageCompressor';
@@ -128,7 +130,7 @@ export const AiAssistantSheet: React.FC = () => {
     setSpeechError(null);
     setIsListening(true);
 
-    const rec = startSpeechRecognition({
+    void startSpeechRecognition({
       onResult: (transcript, isFinal) => {
         setInput(transcript);
         if (isFinal) {
@@ -145,20 +147,17 @@ export const AiAssistantSheet: React.FC = () => {
       onEnd: () => {
         setIsListening(false);
       },
+    }).then((rec) => {
+      recognitionRef.current = rec;
+      if (!rec) setIsListening(false);
     });
-
-    recognitionRef.current = rec;
   };
 
   // Image Upload with WebP 85 Compression
-  const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-
+  const handleReceiptImage = async (file: File) => {
     if (!canReadReceipts) {
       // No key: say so plainly rather than inventing a transaction from the photo
       pushAi('Đọc ảnh hóa đơn cần Gemini API key. Thêm key trong Cài đặt, hoặc gõ số tiền ở đây.', { isError: true });
-      if (fileInputRef.current) fileInputRef.current.value = '';
       return;
     }
 
@@ -194,7 +193,44 @@ export const AiAssistantSheet: React.FC = () => {
     } finally {
       setIsProcessing(false);
       setReadingImage(false);
+    }
+  };
+
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    void handleReceiptImage(file).finally(() => {
       if (fileInputRef.current) fileInputRef.current.value = '';
+    });
+  };
+
+  const handleReceiptPicker = async () => {
+    if (!Capacitor.isNativePlatform()) {
+      fileInputRef.current?.click();
+      return;
+    }
+
+    try {
+      // The native prompt offers both camera and gallery. Android only asks for
+      // Camera when the user chooses to take a photo.
+      const photo = await NativeCamera.getPhoto({
+        source: CameraSource.Prompt,
+        resultType: CameraResultType.DataUrl,
+        quality: 90,
+        width: 1600,
+        correctOrientation: true,
+        promptLabelHeader: 'Ảnh hóa đơn',
+        promptLabelPicture: 'Chụp ảnh',
+        promptLabelPhoto: 'Chọn từ thư viện',
+        promptLabelCancel: 'Hủy',
+      });
+      if (!photo.dataUrl) return;
+      const blob = await (await fetch(photo.dataUrl)).blob();
+      await handleReceiptImage(new File([blob], 'hoa-don.jpg', { type: blob.type || 'image/jpeg' }));
+    } catch (error) {
+      const message = error instanceof Error ? error.message.toLowerCase() : '';
+      if (message.includes('cancel')) return;
+      pushAi('Không thể mở camera. Hãy cấp quyền Camera trong Cài đặt rồi thử lại.', { isError: true });
     }
   };
 
@@ -567,7 +603,7 @@ HÃY CẬP NHẬT LẠI VÀ CHỈ BÁO KẾT QUẢ NGẮN GỌN TRONG 1 CÂU THE
                 <Tooltip content={canReadReceipts ? 'Chụp hoặc chọn ảnh hóa đơn' : 'Cần Gemini API key để đọc hóa đơn'}>
                   <button
                     type="button"
-                    onClick={() => fileInputRef.current?.click()}
+                    onClick={() => void handleReceiptPicker()}
                     disabled={isProcessing}
                     className={iconButton}
                     aria-label="Gửi ảnh hóa đơn"

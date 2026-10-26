@@ -1,10 +1,17 @@
 // src/services/speech.ts
-// Speech to Text support using Web Speech API (vi-VN)
+// Speech to Text support using the native Android recognizer in the APK and
+// the Web Speech API in browsers.
+import { Capacitor, type PluginListenerHandle } from '@capacitor/core';
+import { SpeechRecognition } from '@capacitor-community/speech-recognition';
 
 export interface SpeechRecognitionResultHandler {
   onResult: (transcript: string, isFinal: boolean) => void;
   onError: (error: string) => void;
   onEnd: () => void;
+}
+
+export interface ActiveSpeechRecognition {
+  stop: () => void;
 }
 
 // Extend Window interface for Web Speech API
@@ -16,10 +23,75 @@ declare global {
 }
 
 export function isSpeechRecognitionSupported(): boolean {
-  return typeof window !== 'undefined' && Boolean(window.SpeechRecognition || window.webkitSpeechRecognition);
+  return (
+    Capacitor.isNativePlatform() ||
+    (typeof window !== 'undefined' && Boolean(window.SpeechRecognition || window.webkitSpeechRecognition))
+  );
 }
 
-export function startSpeechRecognition(handlers: SpeechRecognitionResultHandler) {
+async function startNativeSpeechRecognition(handlers: SpeechRecognitionResultHandler): Promise<ActiveSpeechRecognition | null> {
+  try {
+    const { available } = await SpeechRecognition.available();
+    if (!available) {
+      handlers.onError('Thiết bị chưa hỗ trợ nhận giọng nói.');
+      return null;
+    }
+
+    let permission = await SpeechRecognition.checkPermissions();
+    if (permission.speechRecognition !== 'granted') {
+      // This is called directly from the microphone button, which lets Android
+      // display its normal runtime permission dialog at the right moment.
+      permission = await SpeechRecognition.requestPermissions();
+    }
+    if (permission.speechRecognition !== 'granted') {
+      handlers.onError('Cần cấp quyền Micro để nhập giao dịch bằng giọng nói.');
+      return null;
+    }
+
+    let latestTranscript = '';
+    let finished = false;
+    let partialListener: PluginListenerHandle | undefined;
+    let stateListener: PluginListenerHandle | undefined;
+    const cleanUp = () => {
+      void partialListener?.remove();
+      void stateListener?.remove();
+    };
+    const finish = () => {
+      if (finished) return;
+      finished = true;
+      if (latestTranscript) handlers.onResult(latestTranscript, true);
+      handlers.onEnd();
+      cleanUp();
+    };
+
+    partialListener = await SpeechRecognition.addListener('partialResults', ({ matches }) => {
+      const transcript = matches[0]?.trim();
+      if (!transcript) return;
+      latestTranscript = transcript;
+      handlers.onResult(transcript, false);
+    });
+    stateListener = await SpeechRecognition.addListener('listeningState', ({ status }) => {
+      if (status === 'stopped') finish();
+    });
+
+    await SpeechRecognition.start({ language: 'vi-VN', maxResults: 1, partialResults: true, popup: false });
+    return {
+      stop: () => {
+        void SpeechRecognition.stop().catch(() => undefined);
+        finish();
+      },
+    };
+  } catch {
+    handlers.onError('Không thể khởi động micro. Hãy kiểm tra quyền Micro trong Cài đặt.');
+    return null;
+  }
+}
+
+export async function startSpeechRecognition(handlers: SpeechRecognitionResultHandler): Promise<ActiveSpeechRecognition | null> {
+  if (Capacitor.isNativePlatform()) {
+    return startNativeSpeechRecognition(handlers);
+  }
+
   if (!isSpeechRecognitionSupported()) {
     handlers.onError('Trình duyệt chưa hỗ trợ nhận dạng giọng nói trực tiếp.');
     return null;
@@ -69,7 +141,7 @@ export function startSpeechRecognition(handlers: SpeechRecognitionResultHandler)
 
   try {
     recognition.start();
-    return recognition;
+    return recognition as ActiveSpeechRecognition;
   } catch (err) {
     handlers.onError('Không thể khởi động micro.');
     return null;
