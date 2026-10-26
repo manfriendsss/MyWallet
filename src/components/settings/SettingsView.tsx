@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { Moon, Sun, Monitor, Download, RotateCcw, Eye, EyeOff, LogOut, Cloud, KeyRound, Fingerprint, Trash2 } from 'lucide-react';
+import { Moon, Sun, Monitor, Download, RotateCcw, Eye, EyeOff, LogOut, Cloud, KeyRound, Fingerprint, Trash2, type LucideIcon } from 'lucide-react';
 import { passkeyApi, passkeysSupported, type PasskeyInfo } from '../../services/api';
 import { formatDate } from '../../utils/formatters';
 import { useAuth } from '../../context/AuthContext';
@@ -142,16 +142,18 @@ const PasskeySection: React.FC = () => {
   };
 
   return (
-    <div className="mt-4 border-t border-rule pt-4 space-y-3">
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <p className="text-sm font-semibold text-ink">Vân tay / Face ID</p>
+    <SettingRow
+      icon={Fingerprint}
+      title="Vân tay / Face ID"
+      description="Đăng nhập không cần mật khẩu"
+      action={
         <Button variant="outline" size="sm" onClick={add} isLoading={busy}>
-          {!busy && <Fingerprint className="w-4 h-4" aria-hidden="true" />}
-          <span>Thêm cho máy này</span>
+          <span>Thêm</span>
         </Button>
-      </div>
+      }
+    >
       {list && list.length > 0 && (
-        <ul className="divide-y divide-rule rounded-control border border-rule">
+        <ul className="mb-2 divide-y divide-rule rounded-control border border-rule">
           {list.map((p) => (
             <li key={p.id} className="flex items-center gap-3 px-3 py-2">
               <Fingerprint className="w-4 h-4 shrink-0 text-muted" aria-hidden="true" />
@@ -171,13 +173,45 @@ const PasskeySection: React.FC = () => {
           ))}
         </ul>
       )}
-      <StatusLine status={message} />
-    </div>
+      {message && <StatusLine status={message} />}
+    </SettingRow>
   );
 };
 
+/**
+ * One setting, laid out the same everywhere: icon, name and state on the left,
+ * its one action on the right, anything it opens (a form, a list) underneath.
+ */
+const SettingRow: React.FC<{
+  icon: LucideIcon;
+  title: string;
+  description?: React.ReactNode;
+  action?: React.ReactNode;
+  danger?: boolean;
+  children?: React.ReactNode;
+}> = ({ icon: Icon, title, description, action, danger, children }) => (
+  <div className="py-3 first:pt-0 last:pb-0">
+    <div className="flex items-center gap-3">
+      <span
+        className={cn(
+          'grid h-9 w-9 shrink-0 place-items-center rounded-control',
+          danger ? 'bg-expense-soft text-expense' : 'bg-paper-2 text-muted'
+        )}
+      >
+        <Icon className="w-4 h-4" aria-hidden="true" />
+      </span>
+      <div className="min-w-0 flex-1">
+        <p className={cn('text-sm font-semibold', danger ? 'text-expense' : 'text-ink')}>{title}</p>
+        {description && <div className="text-xs text-muted">{description}</div>}
+      </div>
+      {action && <div className="shrink-0">{action}</div>}
+    </div>
+    {children && <div className="mt-3">{children}</div>}
+  </div>
+);
+
 const AccountCard: React.FC = () => {
-  const { user, logout } = useAuth();
+  const { user } = useAuth();
   const { syncStatus } = useWallet();
   const [changing, setChanging] = useState(false);
   const [done, setDone] = useState(false);
@@ -189,41 +223,47 @@ const AccountCard: React.FC = () => {
         id="account-heading"
         title="Tài khoản"
         description={user ? `Đăng nhập: ${user.username}` : 'Chưa đăng nhập'}
-        action={
-          user && (
-            <Button variant="outline" size="sm" onClick={() => void logout()}>
-              <LogOut className="w-4 h-4" aria-hidden="true" />
-              <span>Đăng xuất</span>
-            </Button>
-          )
-        }
       />
-      <p className={cn('flex items-center gap-2 text-sm font-semibold', sync.tone)} role="status" aria-live="polite">
-        <Cloud className="w-4 h-4" aria-hidden="true" />
-        <span>{sync.text}</span>
-      </p>
-
-      {user && (
-        <div className="mt-4 border-t border-rule pt-4">
-          {changing ? (
-            <ChangePasswordForm
-              onDone={() => {
-                setChanging(false);
-                setDone(true);
-              }}
-            />
-          ) : (
-            <div className="flex flex-wrap items-center gap-3">
-              <Button variant="outline" onClick={() => { setChanging(true); setDone(false); }}>
-                <KeyRound className="w-4 h-4" aria-hidden="true" />
-                <span>Đổi mật khẩu</span>
+      <div className="divide-y divide-rule">
+        <SettingRow
+          icon={Cloud}
+          title="Đồng bộ"
+          description={
+            <span className={cn('font-semibold', sync.tone)} role="status" aria-live="polite">
+              {sync.text}
+            </span>
+          }
+        />
+        {user && (
+          <SettingRow
+            icon={KeyRound}
+            title="Mật khẩu"
+            description={done ? <span className="font-semibold text-income">Đã đổi mật khẩu.</span> : undefined}
+            action={
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => {
+                  setChanging((v) => !v);
+                  setDone(false);
+                }}
+              >
+                {changing ? 'Hủy' : 'Đổi'}
               </Button>
-              {done && <span className="text-sm font-semibold text-income">Đã đổi mật khẩu.</span>}
-            </div>
-          )}
-        </div>
-      )}
-      {user && <PasskeySection />}
+            }
+          >
+            {changing && (
+              <ChangePasswordForm
+                onDone={() => {
+                  setChanging(false);
+                  setDone(true);
+                }}
+              />
+            )}
+          </SettingRow>
+        )}
+        {user && <PasskeySection />}
+      </div>
     </Card>
   );
 };
@@ -240,6 +280,7 @@ export const SettingsView: React.FC = () => {
   } = useWallet();
 
   const { theme, setTheme } = useTheme();
+  const { user, logout } = useAuth();
 
   // AI Key state
   const [geminiKeyInput, setGeminiKeyInput] = useState(aiSettings.geminiApiKey || '');
@@ -334,12 +375,29 @@ export const SettingsView: React.FC = () => {
 
   return (
     <Stagger className="mx-auto max-w-3xl space-y-6">
-      {/* 0. Account */}
+      {/* Most used first, destructive last: account, look, assistant, data, sign out */}
       <StaggerItem>
         <AccountCard />
       </StaggerItem>
 
-      {/* 1. AI */}
+      <StaggerItem>
+      <Card aria-labelledby="theme-heading">
+        <CardHeader id="theme-heading" title="Giao diện" />
+        <div className="seg" role="group" aria-label="Chế độ giao diện">
+          {[
+            { id: 'light' as const, label: 'Sáng', Icon: Sun },
+            { id: 'dark' as const, label: 'Tối', Icon: Moon },
+            { id: 'system' as const, label: 'Hệ thống', Icon: Monitor },
+          ].map(({ id, label, Icon }) => (
+            <button key={id} type="button" aria-pressed={theme === id} onClick={() => setTheme(id)} className="inline-flex items-center justify-center gap-2">
+              <Icon className="w-4 h-4" aria-hidden="true" />
+              <span>{label}</span>
+            </button>
+          ))}
+        </div>
+      </Card>
+      </StaggerItem>
+
       <StaggerItem>
       <Card aria-labelledby="ai-heading">
         <CardHeader
@@ -432,16 +490,18 @@ export const SettingsView: React.FC = () => {
 
           <StatusLine status={aiStatus} />
 
-          <div className="flex flex-wrap gap-2">
+          {/* Save and test side by side; clearing keys sits apart, below */}
+          <div className="grid grid-cols-2 gap-2">
             <Button type="submit" variant="primary">
-              Lưu cấu hình
+              Lưu
             </Button>
             <Button variant="outline" onClick={handleTestAi} isLoading={isTesting}>
-              Kiểm tra kết nối
+              Kiểm tra
             </Button>
             {(aiSettings.geminiApiKey || aiSettings.deepseekApiKey) && (
-              <Button variant="danger" onClick={handleClearKeys} className="sm:ml-auto">
-                Xóa mọi key
+              <Button variant="ghost" onClick={handleClearKeys} className="col-span-2 text-expense">
+                <Trash2 className="w-4 h-4" aria-hidden="true" />
+                <span>Xóa mọi key khỏi trình duyệt</span>
               </Button>
             )}
           </div>
@@ -449,57 +509,59 @@ export const SettingsView: React.FC = () => {
       </Card>
       </StaggerItem>
 
-      {/* 3. Theme */}
-      <StaggerItem>
-      <Card aria-labelledby="theme-heading">
-        <CardHeader id="theme-heading" title="Giao diện" />
-        <div className="seg" role="group" aria-label="Chế độ giao diện">
-          {[
-            { id: 'light' as const, label: 'Sáng', Icon: Sun },
-            { id: 'dark' as const, label: 'Tối', Icon: Moon },
-            { id: 'system' as const, label: 'Theo hệ thống', Icon: Monitor },
-          ].map(({ id, label, Icon }) => (
-            <button key={id} type="button" aria-pressed={theme === id} onClick={() => setTheme(id)} className="inline-flex items-center gap-2">
-              <Icon className="w-4 h-4" aria-hidden="true" />
-              <span>{label}</span>
-            </button>
-          ))}
-        </div>
-      </Card>
-      </StaggerItem>
-
-      {/* 4. Data */}
       <StaggerItem>
       <Card aria-labelledby="data-heading">
         <CardHeader
           id="data-heading"
           title="Dữ liệu"
-          description="Dữ liệu được lưu trên máy chủ (Cloudflare D1) và đồng bộ giữa các thiết bị. Bản sao lưu JSON để bạn giữ riêng."
+          description="Lưu trên máy chủ (Cloudflare D1), đồng bộ giữa các thiết bị."
         />
-        <div className="flex flex-wrap gap-2">
-          <Button variant="outline" onClick={handleExportData}>
-            <Download className="w-4 h-4" aria-hidden="true" />
-            <span>Tải bản sao lưu (JSON)</span>
-          </Button>
-
-          <Button
-            variant="danger"
-            onClick={() => {
-              if (
-                window.confirm(
-                  'Xóa toàn bộ ví và giao dịch, trên máy này và trên máy chủ? Danh mục trở về mặc định.\n\nKhông thể hoàn tác. Hãy tải bản sao lưu trước nếu cần.'
-                )
-              ) {
-                resetAllData();
-              }
-            }}
-          >
-            <RotateCcw className="w-4 h-4" aria-hidden="true" />
-            <span>Xóa toàn bộ dữ liệu</span>
-          </Button>
+        <div className="divide-y divide-rule">
+          <SettingRow
+            icon={Download}
+            title="Sao lưu"
+            description="Tải một bản JSON để giữ riêng"
+            action={
+              <Button variant="outline" size="sm" onClick={handleExportData}>
+                Tải về
+              </Button>
+            }
+          />
+          <SettingRow
+            icon={RotateCcw}
+            danger
+            title="Xóa toàn bộ dữ liệu"
+            description="Ví và giao dịch, không thể hoàn tác"
+            action={
+              <Button
+                variant="danger"
+                size="sm"
+                onClick={() => {
+                  if (
+                    window.confirm(
+                      'Xóa toàn bộ ví và giao dịch, trên máy này và trên máy chủ? Danh mục trở về mặc định.\n\nKhông thể hoàn tác. Hãy tải bản sao lưu trước nếu cần.'
+                    )
+                  ) {
+                    resetAllData();
+                  }
+                }}
+              >
+                Xóa
+              </Button>
+            }
+          />
         </div>
       </Card>
       </StaggerItem>
+
+      {user && (
+        <StaggerItem>
+          <Button variant="outline" onClick={() => void logout()} className="w-full">
+            <LogOut className="w-4 h-4" aria-hidden="true" />
+            <span>Đăng xuất</span>
+          </Button>
+        </StaggerItem>
+      )}
     </Stagger>
   );
 };

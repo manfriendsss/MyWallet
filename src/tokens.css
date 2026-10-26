@@ -16,16 +16,17 @@
   --ease-in: cubic-bezier(0.7, 0, 0.84, 0);
   --ease-in-out: cubic-bezier(0.65, 0, 0.35, 1);
 
-  /* Light: warm cream, never pure white. Orange from the logo leads, green from its banknotes follows. */
-  --color-paper: oklch(96.8% 0.006 70);
-  --color-paper-2: oklch(95.2% 0.007 70);
-  --color-paper-3: oklch(92.6% 0.009 70);
-  --color-surface: oklch(99.3% 0.003 75);
+  /* Light: uncoated paper, never pure white and never yellow (low chroma, hue near 80).
+     Orange from the logo leads, green from its banknotes follows. */
+  --color-paper: oklch(94.6% 0.009 78);
+  --color-paper-2: oklch(93% 0.01 78);
+  --color-paper-3: oklch(90.4% 0.011 76);
+  --color-surface: oklch(97.2% 0.007 80);
   --color-ink: oklch(22% 0.015 50);
   --color-ink-2: oklch(38% 0.015 50);
   --color-muted: oklch(50% 0.015 55);
-  --color-rule: oklch(91.5% 0.008 70);
-  --color-rule-strong: oklch(84% 0.01 65);
+  --color-rule: oklch(89.5% 0.01 76);
+  --color-rule-strong: oklch(82% 0.012 70);
   --color-accent: oklch(60% 0.18 45);
   --color-accent-hover: oklch(55% 0.17 42);
   --color-accent-ink: oklch(99% 0.006 75);

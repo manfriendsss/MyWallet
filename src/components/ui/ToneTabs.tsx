@@ -91,7 +91,7 @@ export function ToneTabs<T extends string>({
             aria-selected={selected}
             onClick={() => onChange(tab.id)}
             className={cn(
-              'relative z-[1] min-h-10 flex-1 rounded-[12px] px-3 text-sm font-semibold transition-colors duration-200',
+              'relative z-[1] min-h-10 flex-1 whitespace-nowrap rounded-[12px] px-2 text-sm font-semibold transition-colors duration-200',
               selected ? 'text-accent-ink' : 'text-muted hover:text-ink'
             )}
           >

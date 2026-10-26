@@ -10,7 +10,7 @@
   var root = document.documentElement
   root.classList.toggle('dark', isDark)
   root.style.colorScheme = isDark ? 'dark' : 'light'
-  var color = isDark ? '#2d2621' : '#fefcfb'
+  var color = isDark ? '#2d2621' : '#f8f5f1'
   var meta = document.querySelector('meta[name="theme-color"]')
   if (meta) meta.setAttribute('content', color)
   var scheme = document.querySelector('meta[name="color-scheme"]')

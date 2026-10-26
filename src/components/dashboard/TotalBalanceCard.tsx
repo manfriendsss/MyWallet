@@ -8,10 +8,6 @@ export const TotalBalanceCard: React.FC = () => {
   const { totalBalanceVnd, totalIncomeThisMonthVnd, totalExpenseThisMonthVnd, totalDebtVnd } = useWallet();
 
   const netSavings = totalIncomeThisMonthVnd - totalExpenseThisMonthVnd;
-  const savingsRate =
-    totalIncomeThisMonthVnd > 0
-      ? Math.round((netSavings / totalIncomeThisMonthVnd) * 100)
-      : 0;
 
   const stats = [
     {
@@ -27,7 +23,6 @@ export const TotalBalanceCard: React.FC = () => {
     {
       label: 'Dư ròng',
       value: formatSigned(netSavings, 'VND', netSavings > 0 ? '+' : '−'),
-      note: totalIncomeThisMonthVnd > 0 ? `${savingsRate}% thu nhập` : undefined,
       tone: netSavings >= 0 ? 'text-ink' : 'text-warn',
     },
   ];
@@ -78,7 +73,6 @@ export const TotalBalanceCard: React.FC = () => {
               <dt className="text-xs sm:text-sm text-muted">{stat.label}</dt>
               <dd className={cn('figure mt-0.5 text-md sm:text-lg font-bold', stat.tone)}>
                 {stat.value}
-                {stat.note && <span className="ml-2 text-xs font-semibold text-muted">{stat.note}</span>}
               </dd>
             </div>
           ))}

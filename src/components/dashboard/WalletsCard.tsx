@@ -62,7 +62,7 @@ const COLOR_OPTIONS = ['#f97316', '#ea580c', '#10b981', '#16a34a', '#3b82f6', PA
 const IconPicker: React.FC<{ value: string; onChange: (id: string) => void }> = ({ value, onChange }) => (
   <fieldset>
     <legend className="label">Biểu tượng</legend>
-    <div role="radiogroup" aria-label="Biểu tượng" className="grid grid-cols-5 gap-2">
+    <div role="radiogroup" aria-label="Biểu tượng" className="grid grid-cols-5 gap-1.5">
       {ICON_OPTIONS.map((opt) => {
         const IconComponent = WALLET_ICONS[opt.id];
         const isSelected = value === opt.id;
@@ -74,12 +74,12 @@ const IconPicker: React.FC<{ value: string; onChange: (id: string) => void }> = 
             aria-checked={isSelected}
             onClick={() => onChange(opt.id)}
             className={cn(
-              'flex flex-col items-center justify-center gap-1 h-16 rounded-control border text-xs font-semibold transition-colors',
+              'flex flex-col items-center justify-center gap-0.5 h-14 min-w-0 rounded-control border px-0.5 text-[11px] font-semibold leading-tight transition-colors',
               isSelected ? 'border-accent bg-accent-soft text-ink' : 'border-rule-strong text-muted hover:text-ink hover:bg-paper-2'
             )}
           >
             <IconComponent className="w-5 h-5" aria-hidden="true" />
-            <span>{opt.label}</span>
+            <span className="max-w-full truncate">{opt.label}</span>
           </button>
         );
       })}
@@ -590,8 +590,10 @@ export const WalletsCard: React.FC = () => {
         onClose={() => setEditingWallet(null)}
         title="Sửa nguồn tiền"
       >
-        <form onSubmit={handleUpdateWallet} className="space-y-5">
-          <div>
+        <form onSubmit={handleUpdateWallet} className="space-y-4">
+          {/* Name and opening balance share a row; a card's limit gets the next one */}
+          <div className="grid grid-cols-2 gap-x-3 gap-y-4">
+          <div className="min-w-0">
             <label htmlFor="wallet-edit-name" className="label">
               Tên hiển thị
             </label>
@@ -609,8 +611,8 @@ export const WalletsCard: React.FC = () => {
             />
           </div>
 
-          <div>
-            <label htmlFor="wallet-edit-initial" className="label">
+          <div className="min-w-0">
+            <label htmlFor="wallet-edit-initial" className="label truncate">
               {editingWallet?.kind === 'credit' ? 'Dư nợ ban đầu' : 'Số dư đầu kỳ'} ({editingWallet?.currency})
             </label>
             <MoneyInput
@@ -626,7 +628,7 @@ export const WalletsCard: React.FC = () => {
           </div>
 
           {editingWallet?.kind === 'credit' && (
-            <div>
+            <div className="col-span-2">
               <label htmlFor="wallet-edit-limit" className="label">
                 Hạn mức thẻ ({editingWallet.currency})
               </label>
@@ -641,6 +643,7 @@ export const WalletsCard: React.FC = () => {
               />
             </div>
           )}
+          </div>
 
           <IconPicker value={editIcon} onChange={setEditIcon} />
           <Swatches label="Màu nhận diện" colors={COLOR_OPTIONS} value={editColor} onChange={setEditColor} />
@@ -671,8 +674,8 @@ export const WalletsCard: React.FC = () => {
                 <p className="text-sm text-muted">Thêm một ví tiền hoặc tài khoản ngân hàng để trả nợ từ đó.</p>
               ) : (
                 <>
-                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-                    <div>
+                  <div className="grid grid-cols-2 gap-3">
+                    <div className="col-span-2">
                       <label htmlFor="pay-from" className="label">
                         Trả từ
                       </label>
@@ -731,7 +734,7 @@ export const WalletsCard: React.FC = () => {
           )}
 
           {/* Delete: asks once, and says what goes with it */}
-          <div className="border-t border-rule pt-4">
+          <div className="border-t border-rule pt-3">
             {confirmingDelete ? (
               <div className="space-y-3">
                 <p className="text-sm text-ink">
@@ -749,7 +752,7 @@ export const WalletsCard: React.FC = () => {
                 </div>
               </div>
             ) : (
-              <Button type="button" variant="danger" onClick={() => setConfirmingDelete(true)} className="w-full">
+              <Button type="button" variant="ghost" onClick={() => setConfirmingDelete(true)} className="w-full text-expense">
                 <Trash2 className="w-4 h-4" aria-hidden="true" />
                 <span>Xóa nguồn tiền</span>
               </Button>

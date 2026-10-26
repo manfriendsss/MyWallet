@@ -1,4 +1,4 @@
-import React, { Suspense, lazy, useEffect, useState } from 'react';
+import React, { Suspense, lazy, useEffect, useLayoutEffect, useState } from 'react';
 import { MotionConfig } from 'framer-motion';
 import { ThemeProvider } from './context/ThemeContext';
 import { WalletProvider, useWallet } from './context/WalletContext';
@@ -42,6 +42,13 @@ const AppContent: React.FC = () => {
   useEffect(() => {
     if (isAssistantOpen) setAssistantLoaded(true);
   }, [isAssistantOpen]);
+
+  // Every tab opens at its top, not at the scroll position of the page before it.
+  // The browser would otherwise restore an old offset on back/forward.
+  useLayoutEffect(() => {
+    if ('scrollRestoration' in window.history) window.history.scrollRestoration = 'manual';
+    window.scrollTo({ top: 0, left: 0, behavior: 'instant' });
+  }, [activeTab]);
 
   // Warm the other tab chunks once the browser is idle after first paint
   useEffect(() => {

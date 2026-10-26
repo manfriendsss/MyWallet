@@ -23,8 +23,11 @@ import {
   Tag, CircleDot, CircleEllipsis,
   type LucideIcon,
 } from 'lucide-react';
+import { PaypalIcon } from './BrandIcon';
 
-const iconMap: Record<string, LucideIcon> = {
+// Wallets can carry a brand mark (PayPal) as well as a Lucide icon
+const iconMap: Record<string, LucideIcon | React.FC<{ className?: string }>> = {
+  PayPal: PaypalIcon,
   Utensils, Coffee, Pizza, Sandwich, Soup, IceCreamCone, Beer, Wine, Apple, Croissant,
   ShoppingBag, ShoppingCart, Shirt, Gem, Gift, Package, Store,
   Car, Bus, Bike, TrainFront, Plane, Fuel, CircleParking, Ship,
