@@ -312,11 +312,12 @@ export const WalletsCard: React.FC = () => {
               debt={owed > 0}
               sub={
                 left !== null
-                  ? `Còn ${formatCurrency(left, wallet.currency)}`
+                  ? formatCurrency(left, wallet.currency)
                   : wallet.currency !== 'VND'
                     ? `≈ ${formatCurrency(Math.abs(amountVnd), 'VND')}`
                     : undefined
               }
+              subTone={left !== null ? 'income' : undefined}
               onClick={() => startEdit(wallet)}
               editLabel={isCard ? 'Thẻ tín dụng' : 'Sửa nguồn tiền'}
             />

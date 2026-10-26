@@ -138,13 +138,6 @@ export const TransactionRow: React.FC<TransactionRowProps> = ({
           <span className="min-w-0 flex-1">
             <span className="flex items-center gap-1.5 text-sm font-semibold text-ink">
               <span className="truncate">{title}</span>
-              {tx.isAiGenerated && (
-                <Tooltip content='Tạo bởi trợ lý AI'>
-                  <span className="shrink-0 rounded-chip bg-paper-3 px-1.5 text-xs font-semibold text-muted">
-                    AI
-                  </span>
-                </Tooltip>
-              )}
             </span>
             <span className="figure mt-0.5 block truncate text-xs text-muted">{meta}</span>
           </span>

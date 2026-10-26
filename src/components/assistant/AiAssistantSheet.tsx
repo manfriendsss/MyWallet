@@ -303,15 +303,34 @@ HÃY CẬP NHẬT LẠI VÀ CHỈ BÁO KẾT QUẢ NGẮN GỌN TRONG 1 CÂU THE
   /** A wallet the AI named, tolerating shortened or reworded names ("Visa" for "Thẻ Visa VIB") */
   const findWallet = (name?: string) => walletByName(name, wallets);
 
+  /**
+   * An expense should not silently empty an unavailable wallet. Keep an
+   * explicitly named credit card, otherwise fall back to a same-currency
+   * cash/bank source that can cover the amount (largest balance first).
+   */
+  const chooseExpenseWallet = (preview: ParsedTransactionFromAi) => {
+    const named = findWallet(preview.walletName) || walletMentionedIn(preview.rawText ?? '', wallets);
+    if (named?.kind === 'credit' || (named && named.currency === preview.currency && named.currentBalance >= preview.amount)) {
+      return named;
+    }
+
+    const available = wallets
+      .filter((wallet) => wallet.kind !== 'credit' && wallet.currency === preview.currency && wallet.currentBalance >= preview.amount)
+      .sort((a, b) => b.currentBalance - a.currentBalance);
+    return available[0] || named || wallets.find((wallet) => wallet.currency === preview.currency && wallet.kind !== 'credit') || wallets[0];
+  };
+
   const isTransfer = currentPreview?.type === 'transfer';
   // Only an unnamed wallet falls back to one in the same currency (an unmatched name used to land in the
   // first VND wallet, so card spending never showed up as card debt)
   const entryWallet =
     currentPreview && !isTransfer
-      ? findWallet(currentPreview.walletName) ||
-        walletMentionedIn(currentPreview.rawText ?? '', wallets) ||
-        wallets.find((w) => w.currency === currentPreview.currency && w.kind !== 'credit') ||
-        wallets[0]
+      ? currentPreview.type === 'expense'
+        ? chooseExpenseWallet(currentPreview)
+        : findWallet(currentPreview.walletName) ||
+          walletMentionedIn(currentPreview.rawText ?? '', wallets) ||
+          wallets.find((wallet) => wallet.currency === currentPreview.currency && wallet.kind !== 'credit') ||
+          wallets[0]
       : undefined;
   const transferFrom = isTransfer ? findWallet(currentPreview?.walletName) : undefined;
   const transferTo = isTransfer ? findWallet(currentPreview?.toWalletName) : undefined;

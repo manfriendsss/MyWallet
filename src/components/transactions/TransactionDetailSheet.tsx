@@ -7,7 +7,6 @@ import {
   Clock3,
   Image as ImageIcon,
   Pencil,
-  Sparkles,
 } from 'lucide-react';
 import type { Category, Transaction, Wallet } from '../../types';
 import { formatCurrency, formatShortDate, formatSigned } from '../../utils/formatters';
@@ -92,12 +91,6 @@ export const TransactionDetailSheet: React.FC<TransactionDetailSheetProps> = ({
               <p className="figure mt-1 text-sm text-muted">≈ {formatCurrency(transaction.amountVnd, 'VND')}</p>
             )}
           </div>
-          {transaction.isAiGenerated && (
-            <span className="inline-flex shrink-0 items-center gap-1 rounded-pill bg-accent-soft px-2.5 py-1 text-xs font-semibold text-ink">
-              <Sparkles className="h-3.5 w-3.5 text-accent" aria-hidden="true" />
-              AI
-            </span>
-          )}
         </div>
 
         <dl className="grid gap-2 sm:grid-cols-2">

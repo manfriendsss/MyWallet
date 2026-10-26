@@ -24,7 +24,7 @@ const tileVariants: Variants = {
 export const TileGrid: React.FC<{ children: React.ReactNode; label: string }> = ({ children, label }) => (
   <motion.ul
     aria-label={label}
-    className="grid grid-cols-3 gap-2 sm:gap-3"
+    className="grid grid-cols-3 gap-1.5 sm:gap-2"
     variants={tileGridVariants}
     initial="hidden"
     animate="show"
@@ -40,13 +40,14 @@ export const GridTile: React.FC<{
   name: string;
   amount: string;
   sub?: string;
+  subTone?: 'income';
   muted?: boolean;
   progress?: { spent: number; budget: number };
   /** Money owed (a credit card): the amount reads in the expense colour */
   debt?: boolean;
   onClick: () => void;
   editLabel: string;
-}> = ({ color, icon, name, amount, sub, muted, progress, debt, onClick, editLabel }) => {
+}> = ({ color, icon, name, amount, sub, subTone, muted, progress, debt, onClick, editLabel }) => {
   const progressRatio = progress?.budget ? progress.spent / progress.budget : 0;
   const progressPercent = Math.max(0, Math.round(progressRatio * 100));
   const fillScale = Math.max(0, Math.min(progressRatio, 1));
@@ -57,7 +58,7 @@ export const GridTile: React.FC<{
         type="button"
         onClick={onClick}
         aria-label={`${editLabel}: ${name}, ${amount}${progress ? `, ${progressPercent}% ngân sách` : ''}`}
-        className="flex h-full w-full flex-col items-center gap-1.5 rounded-control border border-rule bg-paper-2 px-1.5 py-3 text-center transition-colors hover:border-rule-strong hover:bg-paper-3"
+        className="flex h-full w-full flex-col items-center gap-1 rounded-control border border-rule bg-paper-2 px-1 py-2.5 text-center transition-colors hover:border-rule-strong hover:bg-paper-3"
       >
         <ColorTile color={color} size="lg">
           {icon}
@@ -67,7 +68,7 @@ export const GridTile: React.FC<{
         </span>
         <span
           className={cn(
-            'figure w-full break-words text-xs font-bold leading-tight sm:text-sm',
+            'figure w-full whitespace-nowrap text-[11px] font-bold leading-tight sm:text-xs',
             debt ? 'text-expense' : muted ? 'text-muted' : 'text-ink'
           )}
         >
@@ -96,7 +97,11 @@ export const GridTile: React.FC<{
             </span>
           </span>
         ) : null}
-        {sub ? <span className="figure w-full break-words text-[11px] leading-tight text-muted">{sub}</span> : null}
+        {sub ? (
+          <span className={cn('figure w-full whitespace-nowrap text-[11px] leading-tight', subTone === 'income' ? 'text-income' : 'text-muted')}>
+            {sub}
+          </span>
+        ) : null}
       </button>
     </motion.li>
   );
