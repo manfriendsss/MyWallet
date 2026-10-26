@@ -11,8 +11,10 @@ interface ThemeContextType {
 
 const ThemeContext = createContext<ThemeContextType | undefined>(undefined);
 
-// The page background of each theme (--color-paper in tokens.css), as hex for the browser chrome
-const STATUS_BAR = { light: '#f7f4f0', dark: '#211c17' };
+// --color-surface in tokens.css as hex: the header and bottom bar share it, and Chrome on
+// Android paints both the status bar and the system navigation bar with theme-color.
+// Keep in sync with public/theme-init.js.
+const STATUS_BAR = { light: '#fefcfb', dark: '#2d2621' };
 
 /**
  * The phone's status bar (and an installed app's title bar) follows the app's own theme,
