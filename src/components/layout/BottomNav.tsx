@@ -75,7 +75,10 @@ export const BottomNav: React.FC = () => {
 
   return (
     <nav aria-label="Điều hướng chính" className="md:hidden fixed bottom-0 inset-x-0 z-[300]">
-      <div ref={barRef} className="relative bg-surface pb-safe">
+      <div ref={barRef} className="relative pb-safe">
+        {/* Fill only the device safe area. Keeping the upper wrapper transparent
+            lets the SVG's rounded top corners remain visibly rounded. */}
+        <div aria-hidden="true" className="absolute inset-x-0 bottom-0 h-[max(var(--space-xs),env(safe-area-inset-bottom))] bg-surface" />
         {size.w > 0 && (
           <svg
             aria-hidden="true"

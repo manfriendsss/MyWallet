@@ -1,5 +1,6 @@
 import React, { useMemo, useState } from 'react';
 import { endOfMonth, startOfMonth, subMonths } from 'date-fns';
+import { SlidersHorizontal } from 'lucide-react';
 import { useWallet } from '../../context/WalletContext';
 import type { EntryType, Transaction } from '../../types';
 import { toLocalISODate } from '../../utils/date';
@@ -7,9 +8,11 @@ import { formatShortDate, formatSigned } from '../../utils/formatters';
 import { TransactionRow } from '../dashboard/TransactionRow';
 import { Button } from '../ui/Button';
 import { Card } from '../ui/Card';
+import { Modal } from '../ui/Modal';
 import { Select } from '../ui/Select';
 import { ToneTabs, type ToneTab } from '../ui/ToneTabs';
 import { useToast } from '../ui/Toast';
+import { Tooltip } from '../ui/Tooltip';
 import { TransactionFormModal } from './TransactionForm';
 import { TransactionDetailSheet } from './TransactionDetailSheet';
 
@@ -77,6 +80,7 @@ export const AllTransactionsView: React.FC = () => {
   const [dateRange, setDateRange] = useState<DateRange>('month');
   const [dateBounds, setDateBounds] = useState<DateBounds>(() => getDateBounds('month'));
   const [visibleCount, setVisibleCount] = useState(PAGE_SIZE);
+  const [isFilterOpen, setIsFilterOpen] = useState(false);
 
   const walletById = useMemo(() => new Map(wallets.map((wallet) => [wallet.id, wallet])), [wallets]);
   const categoryById = useMemo(() => new Map(categories.map((category) => [category.id, category])), [categories]);
@@ -139,6 +143,13 @@ export const AllTransactionsView: React.FC = () => {
     return { income, expense };
   }, [filteredTransactions]);
 
+  const filterPeriodLabel = useMemo(() => {
+    const quickLabel = QUICK_RANGES.find((range) => range.id === dateRange)?.label;
+    if (quickLabel) return quickLabel;
+    if (dateBounds.from && dateBounds.to) return `${formatShortDate(dateBounds.from)} – ${formatShortDate(dateBounds.to)}`;
+    return 'Khoảng ngày tùy chọn';
+  }, [dateRange, dateBounds]);
+
   const visibleGroups = useMemo(() => {
     const groups = new Map<string, TransactionGroup>();
 
@@ -175,110 +186,12 @@ export const AllTransactionsView: React.FC = () => {
   return (
     <div className="space-y-4">
       <Card className="space-y-4">
-        <div>
-          <label htmlFor="tx-search" className="label">
-            Tìm kiếm
-          </label>
-          <input
-            id="tx-search"
-            type="search"
-            value={search}
-            onChange={(event) => {
-              setSearch(event.target.value);
-              resetPage();
-            }}
-            placeholder="Tìm ghi chú, danh mục, ví"
-            className="field"
-          />
-        </div>
-
-        <ToneTabs
-          tabs={TYPE_TABS}
-          value={typeFilter}
-          onChange={(value) => {
-            setTypeFilter(value);
-            resetPage();
-          }}
-          label="Loại giao dịch"
-        />
-
-        <div className="grid grid-cols-2 gap-3">
+        <div className="flex items-start justify-between gap-3">
           <div>
-            <label id="wallet-filter-label" htmlFor="wallet-filter" className="label">
-              Ví
-            </label>
-            <Select
-              id="wallet-filter"
-              aria-labelledby="wallet-filter-label"
-              value={walletFilter}
-              options={walletOptions}
-              onChange={(value) => {
-                setWalletFilter(value);
-                resetPage();
-              }}
-              searchable
-            />
+            <p className="text-sm font-semibold text-ink">{filterPeriodLabel}</p>
+            <p className="mt-0.5 text-xs text-muted">{filteredTransactions.length} giao dịch phù hợp</p>
           </div>
-          <div>
-            <label id="category-filter-label" htmlFor="category-filter" className="label">
-              Danh mục
-            </label>
-            <Select
-              id="category-filter"
-              aria-labelledby="category-filter-label"
-              value={categoryFilter}
-              options={categoryOptions}
-              onChange={(value) => {
-                setCategoryFilter(value);
-                resetPage();
-              }}
-              searchable
-            />
-          </div>
-        </div>
-
-        <div className="space-y-3">
-          <div className="flex flex-wrap gap-2" aria-label="Khoảng ngày">
-            {QUICK_RANGES.map((range) => (
-              <Button
-                key={range.id}
-                type="button"
-                size="sm"
-                variant={dateRange === range.id ? 'primary' : 'outline'}
-                aria-pressed={dateRange === range.id}
-                onClick={() => selectQuickRange(range.id)}
-              >
-                {range.label}
-              </Button>
-            ))}
-          </div>
-
-          <div className="grid grid-cols-2 gap-3">
-            <div>
-              <label htmlFor="tx-date-from" className="label">
-                Từ ngày
-              </label>
-              <input
-                id="tx-date-from"
-                type="date"
-                value={dateBounds.from}
-                onChange={(event) => updateDateBound('from', event.target.value)}
-                className="field"
-              />
-            </div>
-            <div>
-              <label htmlFor="tx-date-to" className="label">
-                Đến ngày
-              </label>
-              <input
-                id="tx-date-to"
-                type="date"
-                value={dateBounds.to}
-                onChange={(event) => updateDateBound('to', event.target.value)}
-                className="field"
-              />
-            </div>
-          </div>
+          {search.trim() && <span className="max-w-[45%] truncate rounded-pill bg-paper-3 px-2.5 py-1 text-xs text-muted">“{search.trim()}”</span>}
         </div>
 
         <dl className="grid grid-cols-2 border-t border-rule pt-4">
@@ -292,6 +205,30 @@ export const AllTransactionsView: React.FC = () => {
           </div>
         </dl>
       </Card>
+
+      <ToneTabs
+        tabs={TYPE_TABS}
+        value={typeFilter}
+        onChange={(value) => {
+          setTypeFilter(value);
+          resetPage();
+        }}
+        label="Lọc nhanh loại giao dịch"
+      />
+
+      <div className="flex items-center justify-between gap-3 px-1">
+        <h2 className="text-base text-ink">Danh sách giao dịch</h2>
+        <Tooltip content="Lọc và tìm kiếm giao dịch">
+          <button
+            type="button"
+            onClick={() => setIsFilterOpen(true)}
+            className="grid h-10 w-10 place-items-center rounded-control border border-rule bg-surface text-muted transition-colors hover:bg-paper-3 hover:text-ink"
+            aria-label="Lọc và tìm kiếm giao dịch"
+          >
+            <SlidersHorizontal className="h-5 w-5" aria-hidden="true" />
+          </button>
+        </Tooltip>
+      </div>
 
       <Card className="overflow-clip p-0 sm:p-0">
         {visibleGroups.length === 0 ? (
@@ -357,6 +294,56 @@ export const AllTransactionsView: React.FC = () => {
         toWallet={selected?.toWalletId ? walletById.get(selected.toWalletId) : undefined}
       />
       <TransactionFormModal isOpen={Boolean(editing)} onClose={() => setEditing(null)} transaction={editing ?? undefined} />
+      <Modal isOpen={isFilterOpen} onClose={() => setIsFilterOpen(false)} title="Lọc giao dịch" description="Tìm theo ghi chú, danh mục, ví hoặc thời gian.">
+        <div className="space-y-5">
+          <div>
+            <label htmlFor="tx-search" className="label">Tìm kiếm</label>
+            <input
+              id="tx-search"
+              type="search"
+              value={search}
+              onChange={(event) => {
+                setSearch(event.target.value);
+                resetPage();
+              }}
+              placeholder="Tìm ghi chú, danh mục, ví"
+              className="field"
+              autoFocus
+            />
+          </div>
+
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label id="wallet-filter-label" htmlFor="wallet-filter" className="label">Ví</label>
+              <Select id="wallet-filter" aria-labelledby="wallet-filter-label" value={walletFilter} options={walletOptions} onChange={(value) => { setWalletFilter(value); resetPage(); }} searchable />
+            </div>
+            <div>
+              <label id="category-filter-label" htmlFor="category-filter" className="label">Danh mục</label>
+              <Select id="category-filter" aria-labelledby="category-filter-label" value={categoryFilter} options={categoryOptions} onChange={(value) => { setCategoryFilter(value); resetPage(); }} searchable />
+            </div>
+          </div>
+
+          <div className="space-y-3">
+            <div className="flex flex-wrap gap-2" aria-label="Khoảng ngày">
+              {QUICK_RANGES.map((range) => (
+                <Button key={range.id} type="button" size="sm" variant={dateRange === range.id ? 'primary' : 'outline'} aria-pressed={dateRange === range.id} onClick={() => selectQuickRange(range.id)}>
+                  {range.label}
+                </Button>
+              ))}
+            </div>
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label htmlFor="tx-date-from" className="label">Từ ngày</label>
+                <input id="tx-date-from" type="date" value={dateBounds.from} onChange={(event) => updateDateBound('from', event.target.value)} className="field" />
+              </div>
+              <div>
+                <label htmlFor="tx-date-to" className="label">Đến ngày</label>
+                <input id="tx-date-to" type="date" value={dateBounds.to} onChange={(event) => updateDateBound('to', event.target.value)} className="field" />
+              </div>
+            </div>
+          </div>
+        </div>
+      </Modal>
     </div>
   );
 };
