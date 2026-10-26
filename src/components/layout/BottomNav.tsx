@@ -56,18 +56,18 @@ export const BottomNav: React.FC = () => {
     const isActive = activeTab === item.id;
     const Icon = item.icon;
     return (
-      <li key={item.id} className="flex-1">
+      <li key={item.id} className="min-w-0 flex-1 basis-0">
         <button
           type="button"
           onClick={() => setActiveTab(item.id)}
           aria-current={isActive ? 'page' : undefined}
           className={cn(
-            'flex h-16 w-full flex-col items-center justify-center gap-1 text-xs font-semibold transition-colors',
+            'flex h-16 w-full flex-col items-center justify-center gap-1 px-0.5 text-[11px] font-semibold transition-colors min-[380px]:text-xs',
             isActive ? 'text-accent' : 'text-muted hover:text-ink'
           )}
         >
-          <Icon className="w-5 h-5" aria-hidden="true" />
-          <span>{item.label}</span>
+          <Icon className="h-5 w-5 shrink-0" aria-hidden="true" />
+          <span className="max-w-full whitespace-nowrap leading-none">{item.label}</span>
         </button>
       </li>
     );
@@ -90,7 +90,7 @@ export const BottomNav: React.FC = () => {
 
         <ul className="relative mx-auto flex max-w-md items-center px-2">
           {NAV_ITEMS.slice(0, 2).map(renderItem)}
-          <li className="w-20 shrink-0" aria-hidden="true" />
+          <li className="w-[4.5rem] shrink-0" aria-hidden="true" />
           {NAV_ITEMS.slice(2).map(renderItem)}
         </ul>
       </div>
