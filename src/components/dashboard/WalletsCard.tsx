@@ -327,8 +327,9 @@ export const WalletsCard: React.FC = () => {
       </TileGrid>
 
       <Modal isOpen={isTransferModalOpen} onClose={closeTransferModal} title="Chuyển tiền">
-        <form onSubmit={handleTransfer} className="space-y-5">
-          <div>
+        {/* Two fields per row; the rate hint, note and actions span the full width */}
+        <form onSubmit={handleTransfer} className="grid grid-cols-2 gap-x-3 gap-y-4">
+          <div className="min-w-0">
             <label htmlFor="transfer-from" className="label">
               Từ ví
             </label>
@@ -351,7 +352,7 @@ export const WalletsCard: React.FC = () => {
             />
           </div>
 
-          <div>
+          <div className="min-w-0">
             <label htmlFor="transfer-to" className="label">
               Đến ví
             </label>
@@ -373,36 +374,34 @@ export const WalletsCard: React.FC = () => {
             />
           </div>
 
-          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-            <div>
-              <label htmlFor="transfer-amount" className="label">
-                Số tiền gửi ({transferSource?.currency ?? ''})
-              </label>
-              <MoneyInput
-                id="transfer-amount"
-                name="transferAmount"
-                value={transferAmount}
-                currency={transferSource?.currency}
-                onValueChange={setTransferAmount}
-                className="field figure"
-              />
-            </div>
-            <div>
-              <label htmlFor="transfer-received" className="label">
-                Số tiền nhận ({transferDestination?.currency ?? ''})
-              </label>
-              <MoneyInput
-                id="transfer-received"
-                name="transferReceived"
-                value={transferReceived}
-                currency={transferDestination?.currency}
-                onValueChange={(raw) => {
-                  setTransferReceived(raw);
-                  setReceivedEdited(true);
-                }}
-                className="field figure"
-              />
-            </div>
+          <div className="min-w-0">
+            <label htmlFor="transfer-amount" className="label truncate">
+              Số tiền gửi ({transferSource?.currency ?? ''})
+            </label>
+            <MoneyInput
+              id="transfer-amount"
+              name="transferAmount"
+              value={transferAmount}
+              currency={transferSource?.currency}
+              onValueChange={setTransferAmount}
+              className="field figure"
+            />
+          </div>
+          <div className="min-w-0">
+            <label htmlFor="transfer-received" className="label truncate">
+              Số tiền nhận ({transferDestination?.currency ?? ''})
+            </label>
+            <MoneyInput
+              id="transfer-received"
+              name="transferReceived"
+              value={transferReceived}
+              currency={transferDestination?.currency}
+              onValueChange={(raw) => {
+                setTransferReceived(raw);
+                setReceivedEdited(true);
+              }}
+              className="field figure"
+            />
           </div>
 
           {transferSource &&
@@ -410,7 +409,7 @@ export const WalletsCard: React.FC = () => {
             transferSource.currency !== transferDestination.currency &&
             parseFloat(transferAmount) > 0 &&
             parseFloat(transferReceived) > 0 && (
-              <p className="figure text-xs text-muted">
+              <p className="col-span-2 -mt-2 figure text-xs text-muted">
                 1 {transferSource.currency} ={' '}
                 {formatCurrency(
                   parseFloat(transferReceived) / parseFloat(transferAmount),
@@ -419,8 +418,8 @@ export const WalletsCard: React.FC = () => {
               </p>
             )}
 
-          <div>
-            <label htmlFor="transfer-fee" className="label">
+          <div className="min-w-0">
+            <label htmlFor="transfer-fee" className="label truncate">
               Phí ({transferSource?.currency ?? ''})
             </label>
             <MoneyInput
@@ -434,7 +433,7 @@ export const WalletsCard: React.FC = () => {
             />
           </div>
 
-          <div>
+          <div className="min-w-0">
             <label htmlFor="transfer-date" className="label">
               Ngày
             </label>
@@ -449,7 +448,7 @@ export const WalletsCard: React.FC = () => {
             />
           </div>
 
-          <div>
+          <div className="col-span-2">
             <label htmlFor="transfer-note" className="label">
               Ghi chú
             </label>
@@ -463,7 +462,7 @@ export const WalletsCard: React.FC = () => {
             />
           </div>
 
-          <div className="flex gap-2 pt-2">
+          <div className="col-span-2 flex gap-2 pt-2">
             <Button type="button" variant="outline" onClick={closeTransferModal} className="flex-1">
               Hủy
             </Button>
