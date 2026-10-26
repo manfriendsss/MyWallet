@@ -27,6 +27,21 @@ function syncStatusBar(isDark: boolean) {
   }
   meta.content = isDark ? STATUS_BAR.dark : STATUS_BAR.light;
   document.documentElement.style.colorScheme = isDark ? 'dark' : 'light';
+
+  // Android/Chrome PWA uses these hints to choose icon contrast in browser
+  // chrome. On light UI this explicitly requests dark status-bar text/icons.
+  let colorSchemeMeta = document.querySelector<HTMLMetaElement>('meta[name="color-scheme"]');
+  if (!colorSchemeMeta) {
+    colorSchemeMeta = document.createElement('meta');
+    colorSchemeMeta.name = 'color-scheme';
+    document.head.appendChild(colorSchemeMeta);
+  }
+  colorSchemeMeta.content = isDark ? 'dark' : 'light';
+
+  // Safari uses a separate PWA status-bar hint. It is applied on the next
+  // launch on platforms that do not update it during an active session.
+  const appleStatusBar = document.querySelector<HTMLMetaElement>('meta[name="apple-mobile-web-app-status-bar-style"]');
+  if (appleStatusBar) appleStatusBar.content = isDark ? 'black-translucent' : 'default';
 }
 
 export const ThemeProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
