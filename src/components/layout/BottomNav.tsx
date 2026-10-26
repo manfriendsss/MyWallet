@@ -75,7 +75,7 @@ export const BottomNav: React.FC = () => {
 
   return (
     <nav aria-label="Điều hướng chính" className="md:hidden fixed bottom-0 inset-x-0 z-[300]">
-      <div ref={barRef} className="relative pb-safe">
+      <div ref={barRef} className="relative bg-surface pb-safe">
         {size.w > 0 && (
           <svg
             aria-hidden="true"
