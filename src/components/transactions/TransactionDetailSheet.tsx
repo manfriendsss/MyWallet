@@ -10,9 +10,9 @@ import {
   Sparkles,
 } from 'lucide-react';
 import type { Category, Transaction, Wallet } from '../../types';
-import { receiptApi } from '../../services/api';
 import { formatCurrency, formatShortDate, formatSigned } from '../../utils/formatters';
 import { cn } from '../../utils/cn';
+import { useReceiptUrl } from '../../utils/useReceiptUrl';
 import { Button } from '../ui/Button';
 import { IconRenderer } from '../ui/IconRenderer';
 import { Modal } from '../ui/Modal';
@@ -56,6 +56,8 @@ export const TransactionDetailSheet: React.FC<TransactionDetailSheetProps> = ({
   wallet,
   toWallet,
 }) => {
+  const receiptUrl = useReceiptUrl(transaction?.receiptKey);
+
   if (!transaction) {
     return <Modal isOpen={false} onClose={onClose}><span /></Modal>;
   }
@@ -167,15 +169,15 @@ export const TransactionDetailSheet: React.FC<TransactionDetailSheetProps> = ({
           )}
         </dl>
 
-        {transaction.receiptKey && (
+        {transaction.receiptKey && receiptUrl && (
           <a
-            href={receiptApi.url(transaction.receiptKey)}
+            href={receiptUrl}
             target="_blank"
             rel="noopener noreferrer"
             className="group block overflow-hidden rounded-card border border-rule bg-paper-2"
           >
             <img
-              src={receiptApi.url(transaction.receiptKey)}
+              src={receiptUrl}
               alt="Ảnh hóa đơn của giao dịch"
               loading="lazy"
               className="max-h-52 w-full object-cover transition-transform group-hover:scale-[1.01]"

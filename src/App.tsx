@@ -1,4 +1,6 @@
 import React, { Suspense, lazy, useEffect, useState } from 'react';
+import { Capacitor } from '@capacitor/core';
+import { App as CapacitorApp } from '@capacitor/app';
 import { MotionConfig } from 'framer-motion';
 import { ThemeProvider } from './context/ThemeContext';
 import { WalletProvider, useWallet } from './context/WalletContext';
@@ -26,6 +28,8 @@ const loadTransactions = () =>
   import('./components/transactions/AllTransactionsView').then((m) => ({ default: m.AllTransactionsView }));
 const loadAssistant = () =>
   import('./components/assistant/AiAssistantSheet').then((m) => ({ default: m.AiAssistantSheet }));
+const loadTransactionForm = () =>
+  import('./components/transactions/TransactionForm').then((m) => ({ default: m.TransactionFormModal }));
 
 // Code-splitting lazy loads to optimize bundle size and startup speed
 const BentoDashboard = lazy(loadDashboard);
@@ -34,10 +38,21 @@ const AnalyticsView = lazy(loadAnalytics);
 const SettingsView = lazy(loadSettings);
 const AllTransactionsView = lazy(loadTransactions);
 const AiAssistantSheet = lazy(loadAssistant);
+const TransactionFormModal = lazy(loadTransactionForm);
+
+function isQuickAddUrl(url: string): boolean {
+  try {
+    const parsed = new URL(url);
+    return parsed.protocol === 'mywallet:' && parsed.hostname === 'quick-add';
+  } catch {
+    return false;
+  }
+}
 
 const AppContent: React.FC = () => {
   const { activeTab, isReady, isAssistantOpen } = useWallet();
   const [assistantLoaded, setAssistantLoaded] = useState(false);
+  const [quickAddOpen, setQuickAddOpen] = useState(false);
 
   useEffect(() => {
     if (isAssistantOpen) setAssistantLoaded(true);
@@ -58,6 +73,28 @@ const AppContent: React.FC = () => {
     }
     const id = window.setTimeout(prefetch, 1500);
     return () => window.clearTimeout(id);
+  }, []);
+
+  // Android's home-screen widget launches this native deep link. Keeping the
+  // form here means it also survives authentication before being displayed.
+  useEffect(() => {
+    if (!Capacitor.isNativePlatform()) return;
+
+    let disposed = false;
+    let removeListener: (() => Promise<void>) | undefined;
+    const openFromUrl = (url: string | undefined) => {
+      if (!disposed && url && isQuickAddUrl(url)) setQuickAddOpen(true);
+    };
+
+    void CapacitorApp.getLaunchUrl().then((launch) => openFromUrl(launch?.url));
+    void CapacitorApp.addListener('appUrlOpen', ({ url }) => openFromUrl(url)).then((handle) => {
+      removeListener = () => handle.remove();
+    });
+
+    return () => {
+      disposed = true;
+      void removeListener?.();
+    };
   }, []);
 
   return (
@@ -92,6 +129,9 @@ const AppContent: React.FC = () => {
       {/* Persistent AI Assistant Bottom Sheet */}
       <Suspense fallback={null}>
         {assistantLoaded && <AiAssistantSheet />}
+        {quickAddOpen && isReady && (
+          <TransactionFormModal isOpen onClose={() => setQuickAddOpen(false)} />
+        )}
       </Suspense>
     </AppLayout>
   );

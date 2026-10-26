@@ -75,6 +75,10 @@ npm run build
 
 `npm run dev` chỉ chạy giao diện. Để thử route máy chủ ở local, chạy `npm run build` rồi `wrangler pages dev dist`; đặt các bí mật trong file `.dev.vars` (tự tạo, không commit file này).
 
+### Ứng dụng Android
+
+Nhánh `apk` chứa project Capacitor Android và widget mở nhanh **Thêm giao dịch**. Xem hướng dẫn build, cài đặt và cấu hình ký tại [ANDROID.md](ANDROID.md).
+
 ---
 
 ## Triển khai lên Cloudflare Pages (giữ API key trên máy chủ)

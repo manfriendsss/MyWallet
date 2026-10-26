@@ -3,6 +3,7 @@ import { isISODate, toLocalISODate } from '../utils/date';
 import { formatCurrency } from '../utils/formatters';
 import { getRate } from './currency';
 import { walletMentionedIn } from '../utils/walletMatch';
+import { serverFetch } from './api';
 
 export const GEMINI_MODELS = ['gemini-3.8-flash', 'gemini-3.7-flash', 'gemini-3.6-flash'] as const;
 export const DEEPSEEK_MODELS = ['deepseek-flash', 'deepseek-v4-pro'] as const;
@@ -361,16 +362,17 @@ async function postJson(url: string, headers: Record<string, string>, body: unkn
   const viaServer = url.startsWith('/');
   let res: Response;
   try {
-    res = await fetch(url, {
+    const init: RequestInit = {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', ...headers },
       body: JSON.stringify(body),
       referrerPolicy: 'no-referrer',
-      // The server route needs the Cloudflare Access login cookie; providers never get cookies
+      // The app server needs the session cookie; providers never get cookies.
       credentials: viaServer ? 'same-origin' : 'omit',
       redirect: viaServer ? 'manual' : 'follow',
       signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
-    });
+    };
+    res = viaServer ? await serverFetch(url, init) : await fetch(url, init);
   } catch (err) {
     if (err instanceof DOMException && (err.name === 'TimeoutError' || err.name === 'AbortError')) {
       throw new AiHttpError(`${label} không phản hồi sau ${REQUEST_TIMEOUT_MS / 1000} giây. Thử lại sau.`, 504);

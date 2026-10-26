@@ -1,5 +1,65 @@
 /** Calls to this site's own /api routes. The session lives in an HttpOnly cookie the browser sends itself. */
 
+import { Capacitor, CapacitorHttp } from '@capacitor/core';
+
+const API_ORIGIN = 'https://mywallet.momia.top';
+
+function blobAsBase64(blob: Blob): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => {
+      const value = String(reader.result ?? '');
+      resolve(value.includes(',') ? value.slice(value.indexOf(',') + 1) : value);
+    };
+    reader.onerror = () => reject(reader.error);
+    reader.readAsDataURL(blob);
+  });
+}
+
+function headerValue(headers: Record<string, string>, name: string): string | undefined {
+  const key = Object.keys(headers).find((candidate) => candidate.toLowerCase() === name.toLowerCase());
+  return key ? headers[key] : undefined;
+}
+
+/**
+ * Native requests bypass the bundled WebView asset server while preserving the
+ * backend's existing URL, cookies and CSRF policy. Web/PWA behavior is unchanged.
+ */
+export async function serverFetch(path: string, init: RequestInit = {}): Promise<Response> {
+  if (!Capacitor.isNativePlatform()) return fetch(path, init);
+
+  const requestHeaders = new Headers(init.headers);
+  let data: unknown;
+  let dataType: 'file' | undefined;
+  if (init.body instanceof Blob) {
+    data = await blobAsBase64(init.body);
+    dataType = 'file';
+  } else if (typeof init.body === 'string') {
+    data = init.body;
+  }
+
+  const nativeResponse = await CapacitorHttp.request({
+    url: `${API_ORIGIN}${path}`,
+    method: init.method ?? 'GET',
+    headers: Object.fromEntries(requestHeaders.entries()),
+    data,
+    dataType,
+    connectTimeout: 20_000,
+    readTimeout: 30_000,
+    disableRedirects: init.redirect === 'manual',
+    responseType: 'text',
+  });
+
+  const body = typeof nativeResponse.data === 'string'
+    ? nativeResponse.data
+    : JSON.stringify(nativeResponse.data ?? null);
+  const responseBody = [204, 205, 304].includes(nativeResponse.status) ? null : body;
+  return new Response(responseBody, {
+    status: nativeResponse.status,
+    headers: nativeResponse.headers,
+  });
+}
+
 export class ApiError extends Error {
   status: number;
   constructor(message: string, status: number) {
@@ -14,7 +74,7 @@ export const SESSION_EXPIRED_EVENT = 'mywallet:session-expired';
 export async function api<T = unknown>(path: string, init: { method?: string; body?: unknown } = {}): Promise<T> {
   let res: Response;
   try {
-    res = await fetch(path, {
+    res = await serverFetch(path, {
       method: init.method ?? 'GET',
       credentials: 'same-origin',
       headers: init.body !== undefined ? { 'Content-Type': 'application/json' } : undefined,
@@ -84,7 +144,7 @@ export const receiptApi = {
   async upload(image: Blob): Promise<string> {
     let res: Response;
     try {
-      res = await fetch('/api/receipts', {
+      res = await serverFetch('/api/receipts', {
         method: 'POST',
         credentials: 'same-origin',
         headers: { 'Content-Type': image.type || 'image/webp' },
@@ -98,7 +158,23 @@ export const receiptApi = {
     if (!res.ok) throw new ApiError(data?.error?.message || `Lỗi tải ảnh (${res.status})`, res.status);
     return data.key as string;
   },
-  url: (key: string) => `/api/receipts/${key}`,
+  url: (key: string) => `/api/receipts/${encodeURIComponent(key)}`,
+  async displayUrl(key: string): Promise<string> {
+    const path = `/api/receipts/${encodeURIComponent(key)}`;
+    if (!Capacitor.isNativePlatform()) return path;
+
+    const response = await CapacitorHttp.get({
+      url: `${API_ORIGIN}${path}`,
+      connectTimeout: 20_000,
+      readTimeout: 30_000,
+      responseType: 'blob',
+    });
+    if (response.status < 200 || response.status >= 300) {
+      throw new ApiError(`Không tải được ảnh hóa đơn (${response.status})`, response.status);
+    }
+    const mime = headerValue(response.headers, 'content-type')?.split(';')[0] || 'image/webp';
+    return `data:${mime};base64,${String(response.data)}`;
+  },
 };
 
 /** Whether this browser can use passkeys at all */

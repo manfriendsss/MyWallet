@@ -1,0 +1,10 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">MyWallet</string>
+    <string name="title_activity_main">MyWallet</string>
+    <string name="package_name">top.momia.mywallet</string>
+    <string name="custom_url_scheme">top.momia.mywallet</string>
+    <string name="quick_add_widget_description">Mở nhanh biểu mẫu thêm giao dịch</string>
+    <string name="quick_add_widget_title">Thêm giao dịch</string>
+    <string name="quick_add_widget_subtitle">Ghi thu chi ngay</string>
+</resources>

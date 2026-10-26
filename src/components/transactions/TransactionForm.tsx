@@ -2,7 +2,7 @@ import React, { useEffect, useMemo, useState } from 'react';
 import type { Transaction, TransactionType } from '../../types';
 import { useWallet } from '../../context/WalletContext';
 import { toLocalISODate } from '../../utils/date';
-import { receiptApi } from '../../services/api';
+import { useReceiptUrl } from '../../utils/useReceiptUrl';
 import { formatCurrency } from '../../utils/formatters';
 import { Button } from '../ui/Button';
 import { MoneyInput } from '../ui/MoneyInput';
@@ -38,6 +38,7 @@ export const TransactionFormModal: React.FC<TransactionFormModalProps> = ({
   const [date, setDate] = useState(toLocalISODate());
   const [note, setNote] = useState('');
   const [error, setError] = useState('');
+  const receiptUrl = useReceiptUrl(transaction?.receiptKey);
 
   useEffect(() => {
     if (!isOpen) return;
@@ -326,15 +327,15 @@ export const TransactionFormModal: React.FC<TransactionFormModalProps> = ({
           />
         </div>
 
-        {transaction?.receiptKey && (
+        {transaction?.receiptKey && receiptUrl && (
           <a
-            href={receiptApi.url(transaction.receiptKey)}
+            href={receiptUrl}
             target="_blank"
             rel="noopener noreferrer"
             className="block overflow-hidden rounded-control border border-rule"
           >
             <img
-              src={receiptApi.url(transaction.receiptKey)}
+              src={receiptUrl}
               alt="Ảnh hóa đơn của giao dịch"
               loading="lazy"
               className="max-h-56 w-full object-cover"
