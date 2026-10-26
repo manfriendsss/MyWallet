@@ -28,7 +28,8 @@
             </intent-filter>
         </activity>
 
-        <receiver android:name=".QuickAddWidget" android:exported="false">
+        <!-- Launchers discover widgets through this receiver, so it must be exported. -->
+        <receiver android:name=".QuickAddWidget" android:exported="true">
             <intent-filter>
                 <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
             </intent-filter>
