@@ -17,6 +17,7 @@ import { useWallet } from '../../context/WalletContext';
 import { Card, CardHeader } from '../ui/Card';
 import { Modal } from '../ui/Modal';
 import { Button } from '../ui/Button';
+import { MoneyInput } from '../ui/MoneyInput';
 import { Swatches } from '../ui/Swatches';
 import { TileGrid, GridTile, AddTile } from '../ui/GridTile';
 import { PaypalIcon, PAYPAL_BLUE } from '../ui/BrandIcon';
@@ -376,15 +377,12 @@ export const WalletsCard: React.FC = () => {
               <label htmlFor="transfer-amount" className="label">
                 Số tiền gửi ({transferSource?.currency ?? ''})
               </label>
-              <input
+              <MoneyInput
                 id="transfer-amount"
                 name="transferAmount"
-                type="number"
-                inputMode="decimal"
-                step="any"
-                min={0}
                 value={transferAmount}
-                onChange={(event) => setTransferAmount(event.target.value)}
+                currency={transferSource?.currency}
+                onValueChange={setTransferAmount}
                 className="field figure"
               />
             </div>
@@ -392,16 +390,13 @@ export const WalletsCard: React.FC = () => {
               <label htmlFor="transfer-received" className="label">
                 Số tiền nhận ({transferDestination?.currency ?? ''})
               </label>
-              <input
+              <MoneyInput
                 id="transfer-received"
                 name="transferReceived"
-                type="number"
-                inputMode="decimal"
-                step="any"
-                min={0}
                 value={transferReceived}
-                onChange={(event) => {
-                  setTransferReceived(event.target.value);
+                currency={transferDestination?.currency}
+                onValueChange={(raw) => {
+                  setTransferReceived(raw);
                   setReceivedEdited(true);
                 }}
                 className="field figure"
@@ -427,16 +422,13 @@ export const WalletsCard: React.FC = () => {
             <label htmlFor="transfer-fee" className="label">
               Phí ({transferSource?.currency ?? ''})
             </label>
-            <input
+            <MoneyInput
               id="transfer-fee"
               name="transferFee"
-              type="number"
-              inputMode="decimal"
-              step="any"
-              min={0}
               placeholder="0"
               value={transferFee}
-              onChange={(event) => setTransferFee(event.target.value)}
+              currency={transferSource?.currency}
+              onValueChange={setTransferFee}
               className="field figure"
             />
           </div>
@@ -541,16 +533,14 @@ export const WalletsCard: React.FC = () => {
               <label htmlFor="wallet-initial" className="label">
                 {kind === 'credit' ? `Dư nợ hiện tại (${currency})` : `Số dư ban đầu (${currency})`}
               </label>
-              <input
+              <MoneyInput
                 id="wallet-initial"
                 name="initialBalance"
-                type="number"
-                inputMode="decimal"
-                step="any"
-                min={kind === 'credit' ? 0 : undefined}
                 placeholder="0"
                 value={initialBalance}
-                onChange={(e) => setInitialBalance(e.target.value)}
+                currency={currency}
+                allowNegative={kind !== 'credit'}
+                onValueChange={setInitialBalance}
                 className="field figure"
               />
             </div>
@@ -561,16 +551,13 @@ export const WalletsCard: React.FC = () => {
               <label htmlFor="wallet-limit" className="label">
                 Hạn mức thẻ ({currency})
               </label>
-              <input
+              <MoneyInput
                 id="wallet-limit"
                 name="creditLimit"
-                type="number"
-                inputMode="decimal"
-                step="any"
-                min={0}
                 placeholder="Không bắt buộc"
                 value={creditLimit}
-                onChange={(e) => setCreditLimit(e.target.value)}
+                currency={currency}
+                onValueChange={setCreditLimit}
                 className="field figure"
               />
             </div>
@@ -626,15 +613,14 @@ export const WalletsCard: React.FC = () => {
             <label htmlFor="wallet-edit-initial" className="label">
               {editingWallet?.kind === 'credit' ? 'Dư nợ ban đầu' : 'Số dư đầu kỳ'} ({editingWallet?.currency})
             </label>
-            <input
+            <MoneyInput
               id="wallet-edit-initial"
               name="initialBalance"
-              type="number"
-              inputMode="decimal"
-              step="any"
               required
               value={editInitialBalance}
-              onChange={(e) => setEditInitialBalance(e.target.value)}
+              currency={editingWallet?.currency}
+              allowNegative={editingWallet?.kind !== 'credit'}
+              onValueChange={setEditInitialBalance}
               className="field figure"
             />
           </div>
@@ -644,16 +630,13 @@ export const WalletsCard: React.FC = () => {
               <label htmlFor="wallet-edit-limit" className="label">
                 Hạn mức thẻ ({editingWallet.currency})
               </label>
-              <input
+              <MoneyInput
                 id="wallet-edit-limit"
                 name="creditLimit"
-                type="number"
-                inputMode="decimal"
-                step="any"
-                min={0}
                 placeholder="Không bắt buộc"
                 value={editLimit}
-                onChange={(e) => setEditLimit(e.target.value)}
+                currency={editingWallet?.currency}
+                onValueChange={setEditLimit}
                 className="field figure"
               />
             </div>
@@ -708,15 +691,12 @@ export const WalletsCard: React.FC = () => {
                       <label htmlFor="pay-amount" className="label">
                         Số tiền ({wallets.find((w) => w.id === payFrom)?.currency ?? editingWallet.currency})
                       </label>
-                      <input
+                      <MoneyInput
                         id="pay-amount"
                         name="payAmount"
-                        type="number"
-                        inputMode="decimal"
-                        step="any"
-                        min={0}
                         value={payAmount}
-                        onChange={(e) => setPayAmount(e.target.value)}
+                        currency={wallets.find((w) => w.id === payFrom)?.currency ?? editingWallet.currency}
+                        onValueChange={setPayAmount}
                         className="field figure"
                       />
                     </div>
@@ -724,16 +704,13 @@ export const WalletsCard: React.FC = () => {
                       <label htmlFor="pay-fee" className="label">
                         Phí ({wallets.find((w) => w.id === payFrom)?.currency ?? editingWallet.currency})
                       </label>
-                      <input
+                      <MoneyInput
                         id="pay-fee"
                         name="payFee"
-                        type="number"
-                        inputMode="decimal"
-                        step="any"
-                        min={0}
                         placeholder="0"
                         value={payFee}
-                        onChange={(e) => setPayFee(e.target.value)}
+                        currency={wallets.find((w) => w.id === payFrom)?.currency ?? editingWallet.currency}
+                        onValueChange={setPayFee}
                         className="field figure"
                       />
                     </div>

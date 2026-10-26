@@ -3,6 +3,7 @@ import { useWallet } from '../../context/WalletContext';
 import { Card, CardHeader } from '../ui/Card';
 import { Modal } from '../ui/Modal';
 import { Button } from '../ui/Button';
+import { MoneyInput } from '../ui/MoneyInput';
 import { IconRenderer, CATEGORY_ICON_GROUPS } from '../ui/IconRenderer';
 import { Swatches } from '../ui/Swatches';
 import { TileGrid, GridTile, AddTile } from '../ui/GridTile';
@@ -206,16 +207,12 @@ export const CategoriesCard: React.FC = () => {
               <label htmlFor="category-budget" className="label">
                 Ngân sách tháng (đ)
               </label>
-              <input
+              <MoneyInput
                 id="category-budget"
                 name="categoryBudget"
-                type="number"
-                inputMode="decimal"
-                step="any"
-                min="0"
                 placeholder="Không giới hạn"
                 value={budget}
-                onChange={(e) => setBudget(e.target.value)}
+                onValueChange={setBudget}
                 className="field"
               />
             </div>

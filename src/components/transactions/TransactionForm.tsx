@@ -5,6 +5,7 @@ import { toLocalISODate } from '../../utils/date';
 import { receiptApi } from '../../services/api';
 import { formatCurrency } from '../../utils/formatters';
 import { Button } from '../ui/Button';
+import { MoneyInput } from '../ui/MoneyInput';
 import { IconRenderer } from '../ui/IconRenderer';
 import { Modal } from '../ui/Modal';
 import { Select } from '../ui/Select';
@@ -123,15 +124,12 @@ export const TransactionFormModal: React.FC<TransactionFormModalProps> = ({
             <span>Số tiền</span>
             <span className="text-muted">{selectedWallet?.currency ?? ''}</span>
           </label>
-          <input
+          <MoneyInput
             id="transaction-amount"
-            type="number"
-            inputMode="decimal"
-            min="0"
-            step="any"
             required
             value={amount}
-            onChange={(event) => setAmount(event.target.value)}
+            currency={selectedWallet?.currency}
+            onValueChange={setAmount}
             className="field text-2xl"
           />
         </div>
