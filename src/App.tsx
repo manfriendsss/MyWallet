@@ -49,10 +49,20 @@ function isQuickAddUrl(url: string): boolean {
   }
 }
 
+function isQuickAssistantUrl(url: string): boolean {
+  try {
+    const parsed = new URL(url);
+    return parsed.protocol === 'mywallet:' && parsed.hostname === 'assistant';
+  } catch {
+    return false;
+  }
+}
+
 const AppContent: React.FC = () => {
-  const { activeTab, isReady, isAssistantOpen } = useWallet();
+  const { activeTab, isReady, isAssistantOpen, openAssistant } = useWallet();
   const [assistantLoaded, setAssistantLoaded] = useState(false);
   const [quickAddOpen, setQuickAddOpen] = useState(false);
+  const [floatingAssistant, setFloatingAssistant] = useState(false);
 
   useEffect(() => {
     if (isAssistantOpen) setAssistantLoaded(true);
@@ -83,7 +93,12 @@ const AppContent: React.FC = () => {
     let disposed = false;
     let removeListener: (() => Promise<void>) | undefined;
     const openFromUrl = (url: string | undefined) => {
-      if (!disposed && url && isQuickAddUrl(url)) setQuickAddOpen(true);
+      if (disposed || !url) return;
+      if (isQuickAddUrl(url)) setQuickAddOpen(true);
+      if (isQuickAssistantUrl(url)) {
+        setFloatingAssistant(true);
+        openAssistant();
+      }
     };
 
     void CapacitorApp.getLaunchUrl().then((launch) => openFromUrl(launch?.url));
@@ -96,6 +111,11 @@ const AppContent: React.FC = () => {
       void removeListener?.();
     };
   }, []);
+
+  const dismissAssistant = () => {
+    setFloatingAssistant(false);
+    if (Capacitor.isNativePlatform()) void CapacitorApp.exitApp();
+  };
 
   return (
     <AppLayout>
@@ -128,7 +148,7 @@ const AppContent: React.FC = () => {
 
       {/* Persistent AI Assistant Bottom Sheet */}
       <Suspense fallback={null}>
-        {assistantLoaded && <AiAssistantSheet />}
+        {assistantLoaded && <AiAssistantSheet floating={floatingAssistant} onDismiss={floatingAssistant ? dismissAssistant : undefined} />}
         {quickAddOpen && isReady && (
           <TransactionFormModal isOpen onClose={() => setQuickAddOpen(false)} />
         )}

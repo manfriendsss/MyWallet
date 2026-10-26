@@ -8,14 +8,14 @@ import android.content.Intent;
 import android.net.Uri;
 import android.widget.RemoteViews;
 
-/** Home-screen shortcut that opens the native shell directly on the add transaction form. */
+/** Home-screen shortcut that opens the compact AI chat window. */
 public class QuickAddWidget extends AppWidgetProvider {
     @Override
     public void onUpdate(Context context, AppWidgetManager manager, int[] appWidgetIds) {
         for (int appWidgetId : appWidgetIds) {
-            Intent intent = new Intent(context, MainActivity.class);
+            Intent intent = new Intent(context, FloatingAssistantActivity.class);
             intent.setAction(Intent.ACTION_VIEW);
-            intent.setData(Uri.parse("mywallet://quick-add"));
+            intent.setData(Uri.parse("mywallet://assistant"));
             intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_CLEAR_TOP | Intent.FLAG_ACTIVITY_SINGLE_TOP);
 
             PendingIntent pendingIntent = PendingIntent.getActivity(

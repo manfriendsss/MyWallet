@@ -28,6 +28,12 @@
             </intent-filter>
         </activity>
 
+        <activity
+            android:name=".FloatingAssistantActivity"
+            android:configChanges="orientation|keyboardHidden|keyboard|screenSize|locale|smallestScreenSize|screenLayout|uiMode|navigation|density"
+            android:exported="false"
+            android:theme="@style/AppTheme.FloatingAssistant" />
+
         <!-- Launchers discover widgets through this receiver, so it must be exported. -->
         <receiver android:name=".QuickAddWidget" android:exported="true">
             <intent-filter>
