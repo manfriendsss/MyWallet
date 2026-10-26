@@ -121,7 +121,10 @@ function buildSystemPrompt(categories: Category[], wallets: Wallet[]): string {
   const catExpenseList = categories.filter((c) => c.type === 'expense').map((c) => c.name).join(', ');
   const catIncomeList = categories.filter((c) => c.type === 'income').map((c) => c.name).join(', ');
   const walletList = wallets
-    .map((w) => `${w.name} (${w.currency}${w.kind === 'credit' ? ', thẻ tín dụng' : ''})`)
+    .map((w) => {
+      const balance = Number.isFinite(w.currentBalance) ? w.currentBalance : 0;
+      return `${w.name} (${w.currency}, số dư ${balance}${w.kind === 'credit' ? ', thẻ tín dụng' : ''})`;
+    })
     .join(', ');
 
   return `BẠN LÀ HỆ THỐNG TRÍ TUỆ NHÂN TẠO PHÂN TÍCH GIAO DỊCH TÀI CHÍNH CỦA MYWALLET.
@@ -158,7 +161,8 @@ DỮ LIỆU THAM CHIẾU HIỆN CÓ CỦA NGƯỜI DÙNG:
 HƯỚNG DẪN BÓC TÁCH:
 - Số tiền: hỗ trợ các từ viết tắt tiếng Việt ("k" = nghìn, "tr"/"triệu" = 1.000.000, "củ" = 1.000.000). Ví dụ: "65k" -> 65000, "15tr" -> 15000000.
 - Ngoại tệ: dùng đúng mã ISO 4217 của đồng tiền được nhắc tới hoặc in trên hóa đơn (đô -> "USD", euro -> "EUR", tệ/nhân dân tệ -> "CNY", yên -> "JPY", won -> "KRW", zloty -> "PLN", koruna -> "CZK", forint -> "HUF"...). Mặc định là "VND".
-- Nếu người dùng nhắc tới ví nào thì gán vào ví đó. Nếu không nhắc ví, chọn ví mặc định hợp lý với loại tiền tệ.
+- Với chi tiêu từ tiền mặt/tài khoản: chỉ chọn nguồn tiền có số dư cùng loại tiền tệ lớn hơn hoặc bằng số tiền cần chi. Nếu nguồn tiền người dùng nhắc tới hết tiền hoặc không đủ tiền, chọn nguồn khác có đủ số dư; ưu tiên nguồn có số dư cao hơn. Nếu không có nguồn nào đủ tiền thì mới giữ nguồn tiền được nhắc tới. Thẻ tín dụng là ngoại lệ: khi người dùng nói rõ dùng thẻ, vẫn chọn thẻ dù số dư đang là âm.
+- Nếu người dùng không nhắc ví, chọn nguồn có đủ số dư phù hợp với loại tiền tệ.
 - walletName PHẢI chép đúng nguyên văn một tên trong danh sách nguồn tiền ở trên, không viết tắt hay đổi tên.
 - Chi tiêu bằng thẻ tín dụng ("quẹt thẻ", "cà thẻ", "thẻ tín dụng", "trả bằng thẻ", tên ngân hàng của thẻ) thì walletName là nguồn tiền có ghi "thẻ tín dụng" trong danh sách. Đó vẫn là chi tiêu (type "expense"), khoản nợ thẻ tự tăng.
 - Nếu không khớp hoàn toàn với danh mục có sẵn, hãy gán vào danh mục gần nhất hoặc tạo tên danh mục phù hợp.
