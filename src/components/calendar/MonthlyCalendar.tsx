@@ -23,12 +23,18 @@ import { formatCurrency, formatDate, formatSigned } from '../../utils/formatters
 import { cn } from '../../utils/cn';
 import { CARD_ART } from '../../assets/cards';
 import { Stagger, StaggerItem } from '../ui/Stagger';
+import type { Transaction } from '../../types';
+import { TransactionDetailSheet } from '../transactions/TransactionDetailSheet';
+import { TransactionFormModal } from '../transactions/TransactionForm';
 
 export const MonthlyCalendar: React.FC = () => {
   const { transactions, categories, wallets, openAssistant } = useWallet();
   const [currentDate, setCurrentDate] = useState(new Date());
   const [direction, setDirection] = useState<number>(0);
   const [selectedDay, setSelectedDay] = useState<Date | null>(null);
+  const [selectedTransactionId, setSelectedTransactionId] = useState<string | null>(null);
+  const [editing, setEditing] = useState<Transaction | null>(null);
+  const selectedTransaction = transactions.find((transaction) => transaction.id === selectedTransactionId);
 
   const prevMonth = () => {
     setDirection(-1);
@@ -244,7 +250,6 @@ export const MonthlyCalendar: React.FC = () => {
               variant="primary"
               className="mt-4"
               onClick={() => {
-                setSelectedDay(null);
                 openAssistant();
               }}
             >
@@ -263,6 +268,7 @@ export const MonthlyCalendar: React.FC = () => {
                   wallet={wallets.find((w) => w.id === tx.walletId)}
                   toWallet={tx.toWalletId ? wallets.find((w) => w.id === tx.toWalletId) : undefined}
                   showDate={false}
+                  onOpen={(transaction) => setSelectedTransactionId(transaction.id)}
                 />
               ))}
             </ul>
@@ -283,6 +289,20 @@ export const MonthlyCalendar: React.FC = () => {
           </>
         )}
       </Modal>
+      <TransactionDetailSheet
+        isOpen={Boolean(selectedTransaction)}
+        onClose={() => setSelectedTransactionId(null)}
+        onEdit={() => selectedTransaction && setEditing(selectedTransaction)}
+        transaction={selectedTransaction}
+        category={selectedTransaction ? categories.find((category) => category.id === selectedTransaction.categoryId) : undefined}
+        wallet={selectedTransaction ? wallets.find((wallet) => wallet.id === selectedTransaction.walletId) : undefined}
+        toWallet={selectedTransaction?.toWalletId ? wallets.find((wallet) => wallet.id === selectedTransaction.toWalletId) : undefined}
+      />
+      <TransactionFormModal
+        isOpen={Boolean(editing)}
+        onClose={() => setEditing(null)}
+        transaction={editing ?? undefined}
+      />
     </Stagger>
   );
 };

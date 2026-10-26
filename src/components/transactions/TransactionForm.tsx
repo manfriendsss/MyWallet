@@ -28,10 +28,12 @@ export const TransactionFormModal: React.FC<TransactionFormModalProps> = ({
   onClose,
   transaction,
 }) => {
-  const { wallets, categories, addTransaction, updateTransaction } = useWallet();
+  const { wallets, categories, addTransaction, updateTransaction, previewTransferAmount } = useWallet();
   const [type, setType] = useState<TransactionType>('expense');
   const [amount, setAmount] = useState('');
   const [walletId, setWalletId] = useState('');
+  const [toWalletId, setToWalletId] = useState('');
+  const [toAmount, setToAmount] = useState('');
   const [categoryId, setCategoryId] = useState('');
   const [date, setDate] = useState(toLocalISODate());
   const [note, setNote] = useState('');
@@ -41,8 +43,10 @@ export const TransactionFormModal: React.FC<TransactionFormModalProps> = ({
     if (!isOpen) return;
     const nextType = transaction?.type === 'income' ? 'income' : 'expense';
     setType(nextType);
-    setAmount(transaction && transaction.type !== 'transfer' ? String(transaction.amount) : '');
+    setAmount(transaction ? String(transaction.amount) : '');
     setWalletId(transaction?.walletId ?? wallets[0]?.id ?? '');
+    setToWalletId(transaction?.toWalletId ?? '');
+    setToAmount(transaction?.toAmount !== undefined ? String(transaction.toAmount) : '');
     setCategoryId(
       transaction && transaction.type !== 'transfer'
         ? transaction.categoryId
@@ -65,17 +69,140 @@ export const TransactionFormModal: React.FC<TransactionFormModalProps> = ({
   if (transaction?.type === 'transfer') {
     const fromWallet = wallets.find((wallet) => wallet.id === transaction.walletId);
     const toWallet = wallets.find((wallet) => wallet.id === transaction.toWalletId);
+    const selectedFromWallet = wallets.find((wallet) => wallet.id === walletId);
+    const selectedToWallet = wallets.find((wallet) => wallet.id === toWalletId);
+    const destinationOptions = walletOptions.filter((wallet) => wallet.value !== walletId);
+
+    const handleTransferSubmit = (event: React.FormEvent<HTMLFormElement>) => {
+      event.preventDefault();
+      const numericAmount = Number(amount);
+      const numericToAmount = Number(toAmount);
+      if (!selectedFromWallet || !selectedToWallet || selectedFromWallet.id === selectedToWallet.id || !(numericAmount > 0)) {
+        setError('Vui lòng nhập số tiền và chọn hai nguồn tiền khác nhau.');
+        return;
+      }
+
+      updateTransaction(transaction.id, {
+        amount: numericAmount,
+        currency: selectedFromWallet.currency,
+        walletId: selectedFromWallet.id,
+        toWalletId: selectedToWallet.id,
+        toAmount: numericToAmount > 0
+          ? numericToAmount
+          : previewTransferAmount(selectedFromWallet.id, selectedToWallet.id, numericAmount),
+        date,
+        note: note.trim() || undefined,
+      });
+      navigator.vibrate?.(10);
+      onClose();
+    };
+
     return (
-      <Modal isOpen={isOpen} onClose={onClose} title="Sửa giao dịch">
-        <div className="space-y-5">
-          <p className="text-sm text-ink">
-            {fromWallet?.name ?? 'Ví đã xóa'} → {toWallet?.name ?? 'Ví đã xóa'} ·{' '}
-            <span className="font-bold">{formatCurrency(transaction.amount, transaction.currency)}</span>
-          </p>
-          <Button variant="outline" className="w-full" onClick={onClose}>
-            Đóng
-          </Button>
-        </div>
+      <Modal
+        isOpen={isOpen}
+        onClose={onClose}
+        title="Sửa giao dịch"
+        description={`${fromWallet?.name ?? 'Ví đã xóa'} → ${toWallet?.name ?? 'Ví đã xóa'}`}
+      >
+        <form className="space-y-4" onSubmit={handleTransferSubmit}>
+          <div>
+            <label htmlFor="transfer-amount" className="label flex items-center justify-between gap-3">
+              <span>Số tiền chuyển</span>
+              <span className="text-muted">{selectedFromWallet?.currency ?? ''}</span>
+            </label>
+            <MoneyInput
+              id="transfer-amount"
+              required
+              value={amount}
+              currency={selectedFromWallet?.currency}
+              onValueChange={(value) => {
+                setAmount(value);
+                setError('');
+              }}
+              className="field text-2xl"
+            />
+          </div>
+
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label htmlFor="transfer-from-wallet" className="label">Từ nguồn tiền</label>
+              <Select
+                id="transfer-from-wallet"
+                value={walletId}
+                options={walletOptions}
+                onChange={(value) => {
+                  setWalletId(value);
+                  if (value === toWalletId) setToWalletId('');
+                  setToAmount('');
+                  setError('');
+                }}
+                searchable
+              />
+            </div>
+            <div>
+              <label htmlFor="transfer-to-wallet" className="label">Đến nguồn tiền</label>
+              <Select
+                id="transfer-to-wallet"
+                value={toWalletId}
+                options={destinationOptions}
+                onChange={(value) => {
+                  setToWalletId(value);
+                  setToAmount('');
+                  setError('');
+                }}
+                searchable
+              />
+            </div>
+          </div>
+
+          {selectedFromWallet && selectedToWallet && selectedFromWallet.currency !== selectedToWallet.currency && (
+            <div>
+              <label htmlFor="transfer-received" className="label flex items-center justify-between gap-3">
+                <span>Số tiền thực nhận</span>
+                <span className="text-muted">{selectedToWallet.currency}</span>
+              </label>
+              <MoneyInput
+                id="transfer-received"
+                value={toAmount}
+                currency={selectedToWallet.currency}
+                onValueChange={setToAmount}
+                placeholder={formatCurrency(
+                  previewTransferAmount(selectedFromWallet.id, selectedToWallet.id, Number(amount)),
+                  selectedToWallet.currency
+                )}
+                className="field"
+              />
+              <p className="hint">Để trống để dùng tỷ giá hiện tại.</p>
+            </div>
+          )}
+
+          <div>
+            <label htmlFor="transfer-date" className="label">Ngày</label>
+            <input
+              id="transfer-date"
+              type="date"
+              required
+              value={date}
+              onChange={(event) => setDate(event.target.value)}
+              className="field"
+            />
+          </div>
+
+          <div>
+            <label htmlFor="transfer-note" className="label">Ghi chú</label>
+            <input
+              id="transfer-note"
+              type="text"
+              value={note}
+              onChange={(event) => setNote(event.target.value)}
+              className="field"
+            />
+          </div>
+
+          {error && <p className="text-sm text-expense">{error}</p>}
+
+          <Button type="submit" className="w-full">Lưu</Button>
+        </form>
       </Modal>
     );
   }

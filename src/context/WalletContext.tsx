@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useEffect, useRef, useState, useMemo } from 'react';
+import React, { createContext, useCallback, useContext, useEffect, useRef, useState, useMemo } from 'react';
 import type {
   ActiveTab,
   AiSettings,
@@ -37,11 +37,18 @@ import {
 } from '../services/storage';
 import { newId, toLocalISODate } from '../utils/date';
 import { dataApi, type SyncKey } from '../services/api';
+import {
+  APP_HISTORY_KEY,
+  readAppHistoryEntry,
+  withoutDialogHistory,
+  type AppHistoryEntry,
+} from '../utils/appHistory';
 
 interface WalletContextType {
   // Navigation & UI state
   activeTab: ActiveTab;
   setActiveTab: (tab: ActiveTab) => void;
+  goBack: () => void;
   isAssistantOpen: boolean;
   openAssistant: () => void;
   closeAssistant: () => void;
@@ -138,7 +145,10 @@ export const WalletProvider: React.FC<{ children: React.ReactNode; syncEnabled?:
   children,
   syncEnabled = false,
 }) => {
-  const [activeTab, setActiveTab] = useState<ActiveTab>('dashboard');
+  const [activeTab, setActiveTabState] = useState<ActiveTab>(
+    () => readAppHistoryEntry(window.history.state)?.tab ?? 'dashboard'
+  );
+  const activeTabRef = useRef(activeTab);
   const [syncStatus, setSyncStatus] = useState<SyncStatus>(syncEnabled ? 'loading' : 'offline');
   // The server copy has been loaded (or seeded): from here on, local changes are pushed up
   const syncedRef = useRef(false);
@@ -151,6 +161,69 @@ export const WalletProvider: React.FC<{ children: React.ReactNode; syncEnabled?:
   const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [exchangeRates, setExchangeRatesState] = useState<ExchangeRates>(getStoredExchangeRates());
   const [aiSettings, setAiSettingsState] = useState<AiSettings>(getStoredAiSettings());
+
+  useEffect(() => {
+    activeTabRef.current = activeTab;
+  }, [activeTab]);
+
+  // Tabs are real navigation levels even though this is a single-page app.
+  // This makes browser/Android back retrace menus and only leave from Home.
+  useEffect(() => {
+    const existing = readAppHistoryEntry(window.history.state);
+    if (!existing) {
+      const initial: AppHistoryEntry = { tab: 'dashboard', depth: 0 };
+      window.history.replaceState(
+        { ...withoutDialogHistory(window.history.state), [APP_HISTORY_KEY]: initial },
+        '',
+        window.location.href
+      );
+      activeTabRef.current = 'dashboard';
+      setActiveTabState('dashboard');
+    }
+
+    const onPopState = (event: PopStateEvent) => {
+      const entry = readAppHistoryEntry(event.state);
+      if (!entry || entry.tab === activeTabRef.current) return;
+      activeTabRef.current = entry.tab;
+      setActiveTabState(entry.tab);
+    };
+
+    window.addEventListener('popstate', onPopState);
+    return () => window.removeEventListener('popstate', onPopState);
+  }, []);
+
+  const setActiveTab = useCallback((tab: ActiveTab) => {
+    if (tab === activeTabRef.current) return;
+
+    const current = readAppHistoryEntry(window.history.state);
+    const next: AppHistoryEntry = { tab, depth: (current?.depth ?? 0) + 1 };
+    window.history.pushState(
+      { ...withoutDialogHistory(window.history.state), [APP_HISTORY_KEY]: next },
+      '',
+      window.location.href
+    );
+    activeTabRef.current = tab;
+    setActiveTabState(tab);
+  }, []);
+
+  const goBack = useCallback(() => {
+    const current = readAppHistoryEntry(window.history.state);
+    if (current && current.depth > 0) {
+      window.history.back();
+      return;
+    }
+
+    if (activeTabRef.current !== 'dashboard') {
+      const home: AppHistoryEntry = { tab: 'dashboard', depth: 0 };
+      window.history.replaceState(
+        { ...withoutDialogHistory(window.history.state), [APP_HISTORY_KEY]: home },
+        '',
+        window.location.href
+      );
+      activeTabRef.current = 'dashboard';
+      setActiveTabState('dashboard');
+    }
+  }, []);
 
   /** Send every document still marked pending, from this browser's saved copy */
   const flushPending = async () => {
@@ -598,6 +671,7 @@ export const WalletProvider: React.FC<{ children: React.ReactNode; syncEnabled?:
       value={{
         activeTab,
         setActiveTab,
+        goBack,
         isAssistantOpen,
         openAssistant,
         closeAssistant,

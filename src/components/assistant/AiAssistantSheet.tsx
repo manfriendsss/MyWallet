@@ -446,7 +446,6 @@ HÃY CẬP NHẬT LẠI VÀ CHỈ BÁO KẾT QUẢ NGẮN GỌN TRONG 1 CÂU THE
 
   return (
     <>
-    <TransactionFormModal isOpen={manualOpen} onClose={() => setManualOpen(false)} />
     {createPortal(
     <AnimatePresence>
       {isAssistantOpen && (
@@ -556,8 +555,7 @@ HÃY CẬP NHẬT LẠI VÀ CHỈ BÁO KẾT QUẢ NGẮN GỌN TRONG 1 CÂU THE
                   <button
                     type="button"
                     onClick={() => {
-                      // Typing it in by hand: swap the chat for the plain form
-                      closeAssistant();
+                      // Keep the assistant underneath so Back returns to it.
                       setManualOpen(true);
                     }}
                     className={iconButton}
@@ -630,6 +628,7 @@ HÃY CẬP NHẬT LẠI VÀ CHỈ BÁO KẾT QUẢ NGẮN GỌN TRONG 1 CÂU THE
     </AnimatePresence>,
     document.body
   )}
+    <TransactionFormModal isOpen={manualOpen} onClose={() => setManualOpen(false)} />
     </>
   );
 };

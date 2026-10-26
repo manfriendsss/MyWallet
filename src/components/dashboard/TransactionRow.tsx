@@ -16,6 +16,7 @@ interface TransactionRowProps {
   showDate?: boolean;
   onDelete?: (id: string) => void;
   onEdit?: (tx: Transaction) => void;
+  onOpen?: (tx: Transaction) => void;
   index?: number;
 }
 
@@ -28,6 +29,7 @@ export const TransactionRow: React.FC<TransactionRowProps> = ({
   showDate = true,
   onDelete,
   onEdit,
+  onOpen,
   index,
 }) => {
   const [isOpen, setIsOpen] = useState(false);
@@ -53,7 +55,7 @@ export const TransactionRow: React.FC<TransactionRowProps> = ({
       setIsOpen(false);
       return;
     }
-    onEdit?.(tx);
+    onOpen?.(tx);
   };
 
   const handleDelete = () => {
@@ -119,8 +121,8 @@ export const TransactionRow: React.FC<TransactionRowProps> = ({
         <button
           type="button"
           onClick={handleBodyClick}
-          disabled={!onEdit}
-          aria-label={onEdit ? `Sửa ${title}` : title}
+          disabled={!onOpen}
+          aria-label={onOpen ? `Xem chi tiết ${title}` : title}
           className="flex min-w-0 flex-1 items-center gap-3 text-left"
         >
           {isTransfer ? (

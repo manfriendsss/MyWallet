@@ -11,6 +11,7 @@ import { Select } from '../ui/Select';
 import { ToneTabs, type ToneTab } from '../ui/ToneTabs';
 import { useToast } from '../ui/Toast';
 import { TransactionFormModal } from './TransactionForm';
+import { TransactionDetailSheet } from './TransactionDetailSheet';
 
 type TypeFilter = 'all' | EntryType;
 type QuickRange = 'month' | 'previousMonth' | 'threeMonths' | 'all';
@@ -68,6 +69,7 @@ export const AllTransactionsView: React.FC = () => {
   const { wallets, categories, transactions, deleteTransaction, restoreTransactions } = useWallet();
   const { showToast } = useToast();
   const [editing, setEditing] = useState<Transaction | null>(null);
+  const [selectedId, setSelectedId] = useState<string | null>(null);
   const [search, setSearch] = useState('');
   const [typeFilter, setTypeFilter] = useState<TypeFilter>('all');
   const [walletFilter, setWalletFilter] = useState('all');
@@ -78,6 +80,7 @@ export const AllTransactionsView: React.FC = () => {
 
   const walletById = useMemo(() => new Map(wallets.map((wallet) => [wallet.id, wallet])), [wallets]);
   const categoryById = useMemo(() => new Map(categories.map((category) => [category.id, category])), [categories]);
+  const selected = transactions.find((transaction) => transaction.id === selectedId);
 
   const walletOptions = useMemo(
     () => [
@@ -290,7 +293,7 @@ export const AllTransactionsView: React.FC = () => {
         </dl>
       </Card>
 
-      <Card className="overflow-visible p-0 sm:p-0">
+      <Card className="overflow-clip p-0 sm:p-0">
         {visibleGroups.length === 0 ? (
           <p className="px-4 py-12 text-center text-sm text-muted sm:px-5">Không có giao dịch phù hợp.</p>
         ) : (
@@ -313,6 +316,7 @@ export const AllTransactionsView: React.FC = () => {
                       toWallet={tx.toWalletId ? walletById.get(tx.toWalletId) : undefined}
                       showDate={false}
                       onEdit={setEditing}
+                      onOpen={(transaction) => setSelectedId(transaction.id)}
                       onDelete={(id) => {
                         const removed = deleteTransaction(id);
                         showToast({
@@ -343,6 +347,15 @@ export const AllTransactionsView: React.FC = () => {
         )}
       </Card>
 
+      <TransactionDetailSheet
+        isOpen={Boolean(selected)}
+        onClose={() => setSelectedId(null)}
+        onEdit={() => selected && setEditing(selected)}
+        transaction={selected}
+        category={selected ? categoryById.get(selected.categoryId) : undefined}
+        wallet={selected ? walletById.get(selected.walletId) : undefined}
+        toWallet={selected?.toWalletId ? walletById.get(selected.toWalletId) : undefined}
+      />
       <TransactionFormModal isOpen={Boolean(editing)} onClose={() => setEditing(null)} transaction={editing ?? undefined} />
     </div>
   );

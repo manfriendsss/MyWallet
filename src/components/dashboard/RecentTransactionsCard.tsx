@@ -9,6 +9,7 @@ import { CARD_ART } from '../../assets/cards';
 import { ToneTabs, type ToneTab } from '../ui/ToneTabs';
 import type { Transaction } from '../../types';
 import { TransactionFormModal } from '../transactions/TransactionForm';
+import { TransactionDetailSheet } from '../transactions/TransactionDetailSheet';
 import { useToast } from '../ui/Toast';
 
 type Filter = 'all' | 'income' | 'expense';
@@ -37,6 +38,8 @@ export const RecentTransactionsCard: React.FC = () => {
   const { showToast } = useToast();
   const [filter, setFilter] = useState<Filter>('all');
   const [editing, setEditing] = useState<Transaction | null>(null);
+  const [selectedId, setSelectedId] = useState<string | null>(null);
+  const selected = transactions.find((tx) => tx.id === selectedId);
 
   const handleDelete = (id: string) => {
     const removed = deleteTransaction(id);
@@ -103,12 +106,22 @@ export const RecentTransactionsCard: React.FC = () => {
                 wallet={wallets.find((w) => w.id === tx.walletId)}
                 toWallet={tx.toWalletId ? wallets.find((w) => w.id === tx.toWalletId) : undefined}
                 onEdit={setEditing}
+                onOpen={(transaction) => setSelectedId(transaction.id)}
                 onDelete={handleDelete}
               />
             ))}
           </motion.ul>
         )}
       </Card>
+      <TransactionDetailSheet
+        isOpen={Boolean(selected)}
+        onClose={() => setSelectedId(null)}
+        onEdit={() => selected && setEditing(selected)}
+        transaction={selected}
+        category={selected ? categories.find((category) => category.id === selected.categoryId) : undefined}
+        wallet={selected ? wallets.find((wallet) => wallet.id === selected.walletId) : undefined}
+        toWallet={selected?.toWalletId ? wallets.find((wallet) => wallet.id === selected.toWalletId) : undefined}
+      />
       <TransactionFormModal
         isOpen={editing !== null}
         onClose={() => setEditing(null)}

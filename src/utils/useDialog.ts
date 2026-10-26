@@ -1,4 +1,5 @@
-import { useEffect, useRef } from 'react';
+import { useEffect, useId, useRef } from 'react';
+import { asHistoryRecord, DIALOG_HISTORY_KEY } from './appHistory';
 
 const FOCUSABLE =
   'a[href], button:not([disabled]), input:not([disabled]):not([type="hidden"]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])';
@@ -11,7 +12,41 @@ const FOCUSABLE =
 export function useDialog(isOpen: boolean, onClose: () => void) {
   const panelRef = useRef<HTMLDivElement>(null);
   const onCloseRef = useRef(onClose);
+  const dialogId = useId();
+  const ownsHistoryEntryRef = useRef(false);
   onCloseRef.current = onClose;
+
+  // Every open dialog/sheet gets its own browser-history level. Android's back
+  // gesture therefore dismisses the top overlay before navigating the page.
+  useEffect(() => {
+    if (!isOpen) {
+      if (ownsHistoryEntryRef.current) {
+        ownsHistoryEntryRef.current = false;
+        if (asHistoryRecord(window.history.state)[DIALOG_HISTORY_KEY] === dialogId) {
+          window.history.back();
+        }
+      }
+      return;
+    }
+
+    if (!ownsHistoryEntryRef.current) {
+      window.history.pushState(
+        { ...asHistoryRecord(window.history.state), [DIALOG_HISTORY_KEY]: dialogId },
+        '',
+        window.location.href
+      );
+      ownsHistoryEntryRef.current = true;
+    }
+
+    const onPopState = (event: PopStateEvent) => {
+      if (asHistoryRecord(event.state)[DIALOG_HISTORY_KEY] === dialogId) return;
+      ownsHistoryEntryRef.current = false;
+      onCloseRef.current();
+    };
+
+    window.addEventListener('popstate', onPopState);
+    return () => window.removeEventListener('popstate', onPopState);
+  }, [dialogId, isOpen]);
 
   useEffect(() => {
     if (!isOpen) return;

@@ -6,7 +6,7 @@ import { NAV_ITEMS } from './navItems';
 import { Tooltip } from '../ui/Tooltip';
 
 export const Header: React.FC = () => {
-  const { activeTab, setActiveTab } = useWallet();
+  const { activeTab, goBack } = useWallet();
   const { isDark, toggleTheme } = useTheme();
   const current = NAV_ITEMS.find((item) => item.id === activeTab);
   // The full history is a sub-page of Tổng quan: it gets a back arrow, not the logo
@@ -20,7 +20,7 @@ export const Header: React.FC = () => {
           {isSubPage ? (
             <button
               type="button"
-              onClick={() => setActiveTab('dashboard')}
+              onClick={goBack}
               aria-label="Về Tổng quan"
               className="-ml-2 grid h-10 w-10 place-items-center rounded-control text-ink hover:bg-paper-3 transition-colors"
             >
