@@ -5,6 +5,7 @@ import type { Category, Transaction, Wallet } from '../../types';
 import { formatCurrency, formatShortDate, formatSigned } from '../../utils/formatters';
 import { IconRenderer } from '../ui/IconRenderer';
 import { ColorTile } from '../ui/Swatches';
+import { Tooltip } from '../ui/Tooltip';
 
 interface TransactionRowProps {
   tx: Transaction;
@@ -136,9 +137,11 @@ export const TransactionRow: React.FC<TransactionRowProps> = ({
             <span className="flex items-center gap-1.5 text-sm font-semibold text-ink">
               <span className="truncate">{title}</span>
               {tx.isAiGenerated && (
-                <span title="Tạo bởi trợ lý AI" className="shrink-0 rounded-chip bg-paper-3 px-1.5 text-xs font-semibold text-muted">
-                  AI
-                </span>
+                <Tooltip content='Tạo bởi trợ lý AI'>
+                  <span className="shrink-0 rounded-chip bg-paper-3 px-1.5 text-xs font-semibold text-muted">
+                    AI
+                  </span>
+                </Tooltip>
               )}
             </span>
             <span className="figure mt-0.5 block truncate text-xs text-muted">{meta}</span>
@@ -153,15 +156,16 @@ export const TransactionRow: React.FC<TransactionRowProps> = ({
         </button>
 
         {onDelete && (
-          <button
-            type="button"
-            onClick={handleDelete}
-            className="-mr-2 hidden h-10 w-10 shrink-0 place-items-center rounded-control text-muted transition-colors hover:bg-expense-soft hover:text-expense sm:grid"
-            aria-label={`Xóa ${title}`}
-            title="Xóa giao dịch"
-          >
-            <Trash2 className="h-4 w-4" aria-hidden="true" />
-          </button>
+          <Tooltip content='Xóa giao dịch'>
+            <button
+              type="button"
+              onClick={handleDelete}
+              className="-mr-2 hidden h-10 w-10 shrink-0 place-items-center rounded-control text-muted transition-colors hover:bg-expense-soft hover:text-expense sm:grid"
+              aria-label={`Xóa ${title}`}
+            >
+              <Trash2 className="h-4 w-4" aria-hidden="true" />
+            </button>
+          </Tooltip>
         )}
       </motion.div>
     </motion.li>

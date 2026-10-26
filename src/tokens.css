@@ -48,6 +48,8 @@
   --color-on-data: oklch(98% 0.01 75);
   --color-error: var(--color-expense);
   --color-success: var(--color-income);
+  --color-tooltip: oklch(18% 0.005 60);
+  --color-tooltip-ink: oklch(98% 0.003 75);
 
   --font-display: "Plus Jakarta Sans", ui-sans-serif, system-ui, sans-serif;
   --font-body: "Plus Jakarta Sans", ui-sans-serif, system-ui, sans-serif;

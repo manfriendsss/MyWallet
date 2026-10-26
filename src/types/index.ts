@@ -96,11 +96,16 @@ export interface AiSettings {
 }
 
 export interface ParsedTransactionFromAi {
-  type: TransactionType;
+  type: EntryType;
   amount: number;
   currency: CurrencyCode;
   categoryName: string;
+  /** For a transfer: the wallet the money leaves */
   walletName?: string;
+  /** Transfers only: the wallet the money arrives in, what arrived there and any fee (in the source currency) */
+  toWalletName?: string;
+  toAmount?: number;
+  fee?: number;
   note: string;
   date: string;
   confidence: number; // 0 to 1

@@ -119,7 +119,9 @@ export function clearStoredAiKeys(): void {
 function buildSystemPrompt(categories: Category[], wallets: Wallet[]): string {
   const catExpenseList = categories.filter((c) => c.type === 'expense').map((c) => c.name).join(', ');
   const catIncomeList = categories.filter((c) => c.type === 'income').map((c) => c.name).join(', ');
-  const walletList = wallets.map((w) => `${w.name} (${w.currency})`).join(', ');
+  const walletList = wallets
+    .map((w) => `${w.name} (${w.currency}${w.kind === 'credit' ? ', thẻ tín dụng' : ''})`)
+    .join(', ');
 
   return `BẠN LÀ HỆ THỐNG TRÍ TUỆ NHÂN TẠO PHÂN TÍCH GIAO DỊCH TÀI CHÍNH CỦA MYWALLET.
 
@@ -128,15 +130,19 @@ QUY TẮC BẮT BUỘC (TUYỆT ĐỐI TUÂN THỦ):
 2. KHÔNG giải thích dài dòng, KHÔNG đưa ra lời khuyên tài chính sáo rỗng.
 3. CHỈ LÀM VIỆC VÀ BÁO KẾT QUẢ NGẮN GỌN TRONG 1 CÂU DUY NHẤT:
    Cú pháp text trả về: "Đã phân loại: [Thu nhập/Chi tiêu] [Số tiền] [Loại tiền] ([Danh mục]) [từ/vào] [Nguồn tiền]"
+   Với chuyển tiền: "Đã phân loại: Chuyển [Số tiền] [Loại tiền] từ [Nguồn tiền đi] sang [Nguồn tiền đến]"
    Nếu người dùng yêu cầu sửa: "Đã cập nhật: [Nội dung thay đổi ngắn gọn]"
 4. BẮT BUỘC trả kèm một khối JSON duy nhất định dạng:
 \`\`\`json
 {
-  "type": "income" | "expense",
+  "type": "income" | "expense" | "transfer",
   "amount": number,
   "currency": "mã ISO 4217 viết hoa, ví dụ VND, USD, EUR, GBP, CNY, JPY, KRW, PLN, CZK, CHF",
   "categoryName": "string",
   "walletName": "string",
+  "toWalletName": "string (chỉ khi type là transfer)",
+  "toAmount": number | null,
+  "fee": number | null,
   "note": "string",
   "date": "YYYY-MM-DD"
 }
@@ -153,7 +159,44 @@ HƯỚNG DẪN BÓC TÁCH:
 - Ngoại tệ: dùng đúng mã ISO 4217 của đồng tiền được nhắc tới hoặc in trên hóa đơn (đô -> "USD", euro -> "EUR", tệ/nhân dân tệ -> "CNY", yên -> "JPY", won -> "KRW", zloty -> "PLN", koruna -> "CZK", forint -> "HUF"...). Mặc định là "VND".
 - Nếu người dùng nhắc tới ví nào thì gán vào ví đó. Nếu không nhắc ví, chọn ví mặc định hợp lý với loại tiền tệ.
 - Nếu không khớp hoàn toàn với danh mục có sẵn, hãy gán vào danh mục gần nhất hoặc tạo tên danh mục phù hợp.
+- CHUYỂN TIỀN (type "transfer"): tiền đi từ một nguồn tiền của người dùng sang một nguồn tiền khác CŨNG của người dùng, không phải thu hay chi. Ví dụ: "chuyển 2tr từ Techcombank sang tiền mặt", "rút 500k ATM" (ngân hàng -> tiền mặt), "nạp 100 đô vào PayPal từ ngân hàng", "trả nợ thẻ 3tr" (sang ví thẻ tín dụng), "rút PayPal về ngân hàng". Khi đó walletName là nguồn tiền ĐI, toWalletName là nguồn tiền ĐẾN, cả hai phải là tên trong danh sách nguồn tiền ở trên; categoryName để "Chuyển tiền". amount và currency là số tiền rời nguồn đi. toAmount chỉ điền khi người dùng nói rõ số tiền nhận được (ví dụ tỷ giá khác), fee chỉ điền khi người dùng nói rõ phí (tính bằng tiền của nguồn đi); không thì để null. Chuyển tiền cho NGƯỜI KHÁC (mẹ, bạn, chủ nhà...) là chi tiêu, không phải chuyển tiền.
 - Ngày: Nếu nói "hôm qua", "hôm nay", tự tính toán ngày YYYY-MM-DD tương ứng. Hôm nay là ${toLocalISODate()}.`;
+}
+
+const TRANSFER_WORDS = ['chuyển', 'rút', 'nạp', 'trả nợ', 'trả thẻ', 'thanh toán thẻ'];
+
+/**
+ * Money moving between two of the user's own wallets ("chuyển 2tr từ Techcombank sang tiền mặt",
+ * "rút 500k", "trả nợ thẻ 3tr"). Sending money to a person mentions no second wallet, so it stays an expense.
+ */
+function findTransferWallets(lower: string, wallets: Wallet[]): { from: Wallet; to: Wallet } | null {
+  if (wallets.length < 2 || !TRANSFER_WORDS.some((w) => lower.includes(w))) return null;
+
+  const mentioned = wallets
+    .map((w) => ({ w, at: lower.indexOf(w.name.toLowerCase()) }))
+    .filter((m) => m.at >= 0)
+    .sort((a, b) => a.at - b.at);
+  const wordBefore = (at: number) => lower.slice(Math.max(0, at - 6), at);
+
+  let from = mentioned.find((m) => /từ\s*$/.test(wordBefore(m.at)))?.w;
+  let to = mentioned.find((m) => m.w !== from && /(sang|vào|qua|về|cho|thẻ)\s*$/.test(wordBefore(m.at)))?.w;
+  const others = mentioned.map((m) => m.w).filter((w) => w !== from && w !== to);
+
+  if (!to && /trả nợ|trả thẻ|thanh toán thẻ/.test(lower)) {
+    const cards = wallets.filter((w) => w.kind === 'credit');
+    to = others.find((w) => w.kind === 'credit') ?? (cards.length === 1 ? cards[0] : undefined);
+  }
+  // A withdrawal lands in cash
+  if (!to && lower.includes('rút')) to = wallets.find((w) => w !== from && /tiền mặt|cash/i.test(w.name));
+
+  if (!from) from = others.find((w) => w !== to);
+  if (!to) to = others.find((w) => w !== from);
+  // Only the destination was named (paying a card, a withdrawal): take the first ordinary wallet in its currency
+  if (!from && to) {
+    from = wallets.find((w) => w !== to && w.kind !== 'credit' && !/tiền mặt|cash/i.test(w.name) && w.currency === to.currency);
+  }
+
+  return from && to && from !== to ? { from, to } : null;
 }
 
 /**
@@ -203,7 +246,30 @@ export function parseTransactionLocally(
     amount = parseFloat(clean) || 0;
   }
 
-  // 3. Detect Type (Income vs Expense)
+  // 3. Between two of the user's own wallets: a transfer, neither income nor expense
+  const transfer = findTransferWallets(lower, wallets);
+  if (transfer) {
+    const { from, to } = transfer;
+    const data: ParsedTransactionFromAi = {
+      type: 'transfer',
+      amount,
+      currency,
+      categoryName: 'Chuyển tiền',
+      walletName: from.name,
+      toWalletName: to.name,
+      note: text.slice(0, 80),
+      date: toLocalISODate(),
+      confidence: 0.8,
+      rawText: text,
+    };
+    const message =
+      amount > 0
+        ? `Đã phân loại: Chuyển ${formatCurrency(amount, currency)} từ ${from.name} sang ${to.name}.`
+        : 'Chưa thấy số tiền. Hãy ghi kèm số tiền, ví dụ "rút 500k".';
+    return { message, data };
+  }
+
+  // 4. Detect Type (Income vs Expense)
   let type: TransactionType = 'expense';
   const incomeKeywords = ['lương', 'nhận', 'thưởng', 'thu nhập', 'chuyển vào', 'cộng tiền', 'bán', 'được cho', 'tiền về', 'nạp tiền'];
   if (incomeKeywords.some((kw) => lower.includes(kw))) {
@@ -466,14 +532,28 @@ export async function callDeepSeekApi(
 
 /** Model output is untrusted: coerce every field into the shape and range the app expects */
 export function sanitizeParsedTransaction(obj: Record<string, unknown>, rawText?: string): ParsedTransactionFromAi {
-  const amount = Number(obj.amount);
+  const money = (value: unknown) => {
+    const n = Number(value);
+    return Number.isFinite(n) && n > 0 && n < MAX_AMOUNT ? Math.round(n * 100) / 100 : 0;
+  };
   const currency = String(obj.currency || 'VND').toUpperCase() as CurrencyCode;
+  const toWalletName = asString(obj.toWalletName).trim().slice(0, 60);
+  // A transfer without a destination is not one the app can record
+  const type = obj.type === 'income' ? 'income' : obj.type === 'transfer' && toWalletName ? 'transfer' : 'expense';
+  const isTransfer = type === 'transfer';
   return {
-    type: obj.type === 'income' ? 'income' : 'expense',
-    amount: Number.isFinite(amount) && amount > 0 && amount < MAX_AMOUNT ? Math.round(amount * 100) / 100 : 0,
+    type,
+    amount: money(obj.amount),
     currency: isKnownCurrency(currency) ? currency : 'VND',
-    categoryName: asString(obj.categoryName, 'Chi tiêu khác').trim().slice(0, 60) || 'Chi tiêu khác',
+    categoryName: isTransfer
+      ? 'Chuyển tiền'
+      : asString(obj.categoryName, 'Chi tiêu khác').trim().slice(0, 60) || 'Chi tiêu khác',
     walletName: asString(obj.walletName, 'Ví tiền mặt').trim().slice(0, 60),
+    ...(isTransfer && {
+      toWalletName,
+      toAmount: money(obj.toAmount) || undefined,
+      fee: money(obj.fee) || undefined,
+    }),
     note: asString(obj.note).trim().slice(0, 200),
     date: isISODate(obj.date) ? obj.date : toLocalISODate(),
     confidence: 0.95,

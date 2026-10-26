@@ -27,6 +27,7 @@ import { Select } from '../ui/Select';
 import { CARD_ART } from '../../assets/cards';
 import { cn } from '../../utils/cn';
 import { toLocalISODate } from '../../utils/date';
+import { Tooltip } from '../ui/Tooltip';
 
 const WALLET_ICONS: Record<string, React.ElementType> = {
   Wallet: WalletIcon,
@@ -278,10 +279,11 @@ export const WalletsCard: React.FC = () => {
         art={CARD_ART.wallets}
         action={
           wallets.length >= 2 ? (
-            <Button type="button" variant="outline" size="sm" onClick={openTransferModal}>
-              <ArrowLeftRight className="h-4 w-4" aria-hidden="true" />
-              <span>Chuyển tiền</span>
-            </Button>
+            <Tooltip content="Chuyển tiền giữa các nguồn tiền">
+              <Button type="button" variant="outline" size="sm" onClick={openTransferModal}>
+                Chuyển tiền
+              </Button>
+            </Tooltip>
           ) : undefined
         }
       />

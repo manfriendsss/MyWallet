@@ -7,13 +7,14 @@ import { useWallet } from '../../context/WalletContext';
 import { compressImageToWebP, ACCEPTED_IMAGE_TYPES } from '../../utils/imageCompressor';
 import { startSpeechRecognition, isSpeechRecognitionSupported } from '../../services/speech';
 import { callGeminiApi, callDeepSeekApi, parseTransactionLocally, aiKeyFor, isTransientAiError } from '../../services/ai';
-import type { ParsedTransactionFromAi } from '../../types';
+import type { ParsedTransactionFromAi, TransactionType } from '../../types';
 import { formatCurrency } from '../../utils/formatters';
 import { toLocalISODate } from '../../utils/date';
 import { useDialog } from '../../utils/useDialog';
 import { receiptApi } from '../../services/api';
 import { TransactionFormModal } from '../transactions/TransactionForm';
 import { cn } from '../../utils/cn';
+import { Tooltip } from '../ui/Tooltip';
 
 interface ChatMessage {
   id: string;
@@ -51,6 +52,8 @@ export const AiAssistantSheet: React.FC = () => {
     categories,
     wallets,
     addTransaction,
+    addTransfer,
+    previewTransferAmount,
     aiSettings,
   } = useWallet();
 
@@ -250,40 +253,41 @@ HÃY CẬP NHẬT LẠI VÀ CHỈ BÁO KẾT QUẢ NGẮN GỌN TRONG 1 CÂU THE
     }
   };
 
-  const canSave = Boolean(currentPreview && currentPreview.amount > 0 && wallets.length > 0 && categories.length > 0);
+  /** A wallet the AI named: exact name first, then a name containing it (the AI may shorten names) */
+  const findWallet = (name?: string) => {
+    const wanted = (name ?? '').trim().toLowerCase();
+    if (!wanted) return undefined;
+    return (
+      wallets.find((w) => w.name.toLowerCase() === wanted) ||
+      wallets.find((w) => w.name.toLowerCase().includes(wanted) || wanted.includes(w.name.toLowerCase()))
+    );
+  };
 
-  // Confirm and Save transaction
-  const handleConfirmSave = async () => {
-    if (!currentPreview || !canSave) return;
-    // A photo still uploading is waited for, so it stays with the transaction
-    const receiptKey = receiptUpload.current ? await receiptUpload.current : null;
+  const isTransfer = currentPreview?.type === 'transfer';
+  const transferFrom = isTransfer ? findWallet(currentPreview?.walletName) : undefined;
+  const transferTo = isTransfer ? findWallet(currentPreview?.toWalletName) : undefined;
+  const transferReady = Boolean(transferFrom && transferTo && transferFrom.id !== transferTo.id);
 
-    // Find category ID or match first
-    const targetType = currentPreview.type;
-    const cat =
-      categories.find((c) => c.type === targetType && c.name.toLowerCase() === currentPreview.categoryName.toLowerCase()) ||
-      categories.find((c) => c.type === targetType) ||
-      categories[0];
+  /** What leaves the source and what arrives, in each wallet's own currency */
+  const transferAmounts = () => {
+    if (!currentPreview || !transferFrom || !transferTo) return null;
+    let sent = currentPreview.amount;
+    let received = currentPreview.toAmount;
+    // Stated in the destination's currency ("nạp 100 đô vào PayPal"): that is what arrives
+    if (currentPreview.currency !== transferFrom.currency && currentPreview.currency === transferTo.currency) {
+      received = currentPreview.amount;
+      sent = previewTransferAmount(transferTo.id, transferFrom.id, currentPreview.amount);
+    }
+    return { sent, received: received ?? previewTransferAmount(transferFrom.id, transferTo.id, sent) };
+  };
 
-    // Find wallet ID
-    const wallet =
-      wallets.find((w) => w.name.toLowerCase() === (currentPreview.walletName || '').toLowerCase()) ||
-      wallets.find((w) => w.currency === currentPreview.currency) ||
-      wallets[0];
+  const canSave = Boolean(
+    currentPreview &&
+      currentPreview.amount > 0 &&
+      (isTransfer ? transferReady : wallets.length > 0 && categories.length > 0)
+  );
 
-    addTransaction({
-      type: currentPreview.type,
-      amount: currentPreview.amount,
-      currency: currentPreview.currency,
-      walletId: wallet.id,
-      categoryId: cat.id,
-      note: currentPreview.note || cat.name,
-      date: currentPreview.date || toLocalISODate(),
-      time: new Date().toTimeString().slice(0, 5),
-      isAiGenerated: true,
-      receiptKey: receiptKey ?? undefined,
-    });
-
+  const celebrateAndClose = () => {
     confetti({
       particleCount: 60,
       spread: 55,
@@ -296,6 +300,149 @@ HÃY CẬP NHẬT LẠI VÀ CHỈ BÁO KẾT QUẢ NGẮN GỌN TRONG 1 CÂU THE
     setMessages([]);
     closeAssistant();
   };
+
+  // Confirm and Save transaction
+  const handleConfirmSave = async () => {
+    if (!currentPreview || !canSave) return;
+
+    if (isTransfer) {
+      const amounts = transferAmounts();
+      if (!amounts || !transferFrom || !transferTo || !(amounts.sent > 0)) return;
+      addTransfer(transferFrom.id, transferTo.id, amounts.sent, {
+        toAmount: amounts.received > 0 ? amounts.received : undefined,
+        fee: currentPreview.fee,
+        note: currentPreview.note,
+        date: currentPreview.date || toLocalISODate(),
+      });
+      celebrateAndClose();
+      return;
+    }
+
+    // A photo still uploading is waited for, so it stays with the transaction
+    const receiptKey = receiptUpload.current ? await receiptUpload.current : null;
+
+    // Find category ID or match first
+    const targetType: TransactionType = currentPreview.type === 'income' ? 'income' : 'expense';
+    const cat =
+      categories.find((c) => c.type === targetType && c.name.toLowerCase() === currentPreview.categoryName.toLowerCase()) ||
+      categories.find((c) => c.type === targetType) ||
+      categories[0];
+
+    // Find wallet ID
+    const wallet =
+      wallets.find((w) => w.name.toLowerCase() === (currentPreview.walletName || '').toLowerCase()) ||
+      wallets.find((w) => w.currency === currentPreview.currency) ||
+      wallets[0];
+
+    addTransaction({
+      type: targetType,
+      amount: currentPreview.amount,
+      currency: currentPreview.currency,
+      walletId: wallet.id,
+      categoryId: cat.id,
+      note: currentPreview.note || cat.name,
+      date: currentPreview.date || toLocalISODate(),
+      time: new Date().toTimeString().slice(0, 5),
+      isAiGenerated: true,
+      receiptKey: receiptKey ?? undefined,
+    });
+
+    celebrateAndClose();
+  };
+
+  const previewIndex = currentPreview ? messages.findLastIndex((m) => m.previewData) : -1;
+  const amounts = isTransfer ? transferAmounts() : null;
+  const cannotSaveReason = !currentPreview
+    ? ''
+    : !(currentPreview.amount > 0)
+      ? 'Chưa có số tiền hợp lệ. Gõ lại kèm số tiền.'
+      : wallets.length === 0
+        ? 'Chưa có nguồn tiền nào. Thêm ví ở Tổng quan trước rồi lưu giao dịch.'
+        : isTransfer && !transferReady
+          ? 'Chưa rõ chuyển từ đâu sang đâu. Gõ thêm, ví dụ “từ Techcombank sang Tiền mặt”.'
+          : '';
+
+  const previewRow = (label: string, value: React.ReactNode, className = 'truncate font-semibold text-ink') => (
+    <div className="min-w-0">
+      <dt className="text-xs text-muted">{label}</dt>
+      <dd className={className}>{value}</dd>
+    </div>
+  );
+
+  const previewBubble = currentPreview && (
+    <div className="flex justify-start">
+      <section
+        aria-label="Kiểm tra trước khi lưu"
+        className="w-[85%] max-w-sm rounded-card rounded-bl-[4px] bg-paper-3 px-3.5 py-3 text-sm text-ink"
+      >
+        <div className="flex items-baseline justify-between gap-3">
+          <h3 className="text-sm font-semibold text-ink">Kiểm tra trước khi lưu</h3>
+          <p className="text-xs text-muted">Sai? Gõ tiếp để sửa</p>
+        </div>
+
+        <dl className="mt-2.5 grid grid-cols-2 gap-x-4 gap-y-2">
+          {isTransfer ? (
+            <>
+              {previewRow(
+                'Số tiền',
+                formatCurrency(amounts?.sent ?? currentPreview.amount, transferFrom?.currency ?? currentPreview.currency),
+                'figure text-lg font-bold text-ink'
+              )}
+              {previewRow('Loại', 'Chuyển tiền')}
+              {previewRow('Từ', transferFrom?.name ?? (currentPreview.walletName || 'Chưa rõ'))}
+              {previewRow('Sang', transferTo?.name ?? (currentPreview.toWalletName || 'Chưa rõ'))}
+              {transferFrom && transferTo && transferFrom.currency !== transferTo.currency && amounts && amounts.received > 0 &&
+                previewRow('Nhận được', formatCurrency(amounts.received, transferTo.currency), 'figure font-semibold text-ink')}
+              {currentPreview.fee !== undefined &&
+                previewRow(
+                  'Phí',
+                  formatCurrency(currentPreview.fee, transferFrom?.currency ?? currentPreview.currency),
+                  'figure font-semibold text-expense'
+                )}
+            </>
+          ) : (
+            <>
+              {previewRow(
+                'Số tiền',
+                `${currentPreview.type === 'income' ? '+' : '−'}${formatCurrency(currentPreview.amount, currentPreview.currency)}`,
+                cn('figure text-lg font-bold', currentPreview.type === 'income' ? 'text-income' : 'text-expense')
+              )}
+              {previewRow('Loại', currentPreview.type === 'income' ? 'Thu nhập' : 'Chi tiêu')}
+              {previewRow('Danh mục', currentPreview.categoryName)}
+              {previewRow('Nguồn tiền', currentPreview.walletName || 'Mặc định')}
+            </>
+          )}
+          {currentPreview.note && (
+            <div className="col-span-2 min-w-0">
+              <dt className="text-xs text-muted">Ghi chú</dt>
+              <dd className="truncate text-ink-2">{currentPreview.note}</dd>
+            </div>
+          )}
+        </dl>
+
+        {cannotSaveReason && <p className="mt-2 text-sm font-semibold text-expense">{cannotSaveReason}</p>}
+
+        <div className="mt-3 flex gap-2">
+          <button
+            type="button"
+            onClick={() => setCurrentPreview(null)}
+            className="h-10 rounded-control border border-rule-strong bg-surface px-4 text-sm font-semibold text-ink hover:bg-paper-2 transition-colors"
+          >
+            Bỏ
+          </button>
+          <button
+            type="button"
+            onClick={handleConfirmSave}
+            disabled={!canSave}
+            className="flex h-10 flex-1 items-center justify-center gap-2 rounded-control bg-accent px-4 text-sm font-semibold text-accent-ink hover:bg-accent-hover disabled:opacity-55 transition-colors"
+          >
+            <Check className="w-4 h-4" aria-hidden="true" />
+            <span>{isTransfer ? 'Lưu chuyển tiền' : 'Lưu giao dịch'}</span>
+          </button>
+        </div>
+      </section>
+    </div>
+  );
 
   return (
     <>
@@ -343,10 +490,11 @@ HÃY CẬP NHẬT LẠI VÀ CHỈ BÁO KẾT QUẢ NGẮN GỌN TRONG 1 CÂU THE
 
             {/* Conversation */}
             <div className="flex-1 space-y-3 overflow-y-auto px-4 py-4" aria-live="polite" aria-relevant="additions">
-              {messages.map((msg) => {
+              {messages.map((msg, index) => {
                 const isUser = msg.sender === 'user';
                 return (
-                  <div key={msg.id} className={cn('flex', isUser ? 'justify-end' : 'justify-start')}>
+                  <React.Fragment key={msg.id}>
+                  <div className={cn('flex', isUser ? 'justify-end' : 'justify-start')}>
                     <div
                       className={cn(
                         'max-w-[85%] rounded-card px-3.5 py-2.5 text-sm leading-relaxed',
@@ -363,6 +511,9 @@ HÃY CẬP NHẬT LẠI VÀ CHỈ BÁO KẾT QUẢ NGẮN GỌN TRONG 1 CÂU THE
                       <p className="whitespace-pre-wrap">{msg.text}</p>
                     </div>
                   </div>
+                  {/* The check before saving is the bot's next bubble, under the answer that produced it */}
+                  {index === previewIndex && previewBubble}
+                  </React.Fragment>
                 );
               })}
 
@@ -375,71 +526,6 @@ HÃY CẬP NHẬT LẠI VÀ CHỈ BÁO KẾT QUẢ NGẮN GỌN TRONG 1 CÂU THE
 
               <div ref={messagesEndRef} />
             </div>
-
-            {/* Preview of the parsed transaction */}
-            {currentPreview && (
-              <div className="mx-4 mb-3 rounded-card border border-rule-strong bg-paper-2 p-4">
-                <div className="flex items-baseline justify-between gap-3">
-                  <h3 className="text-sm font-semibold text-ink">Kiểm tra trước khi lưu</h3>
-                  <p className="text-xs text-muted">Sai? Gõ tiếp để sửa</p>
-                </div>
-
-                <dl className="mt-3 grid grid-cols-2 gap-x-4 gap-y-2 text-sm">
-                  <div>
-                    <dt className="text-xs text-muted">Số tiền</dt>
-                    <dd className={cn('figure text-lg font-bold', currentPreview.type === 'income' ? 'text-income' : 'text-expense')}>
-                      {currentPreview.type === 'income' ? '+' : '−'}
-                      {formatCurrency(currentPreview.amount, currentPreview.currency)}
-                    </dd>
-                  </div>
-                  <div>
-                    <dt className="text-xs text-muted">Loại</dt>
-                    <dd className="font-semibold text-ink">{currentPreview.type === 'income' ? 'Thu nhập' : 'Chi tiêu'}</dd>
-                  </div>
-                  <div>
-                    <dt className="text-xs text-muted">Danh mục</dt>
-                    <dd className="truncate font-semibold text-ink">{currentPreview.categoryName}</dd>
-                  </div>
-                  <div>
-                    <dt className="text-xs text-muted">Nguồn tiền</dt>
-                    <dd className="truncate font-semibold text-ink">{currentPreview.walletName || 'Mặc định'}</dd>
-                  </div>
-                  {currentPreview.note && (
-                    <div className="col-span-2">
-                      <dt className="text-xs text-muted">Ghi chú</dt>
-                      <dd className="truncate text-ink-2">{currentPreview.note}</dd>
-                    </div>
-                  )}
-                </dl>
-
-                {!canSave && (
-                  <p className="mt-2 text-sm font-semibold text-expense">
-                    {wallets.length === 0
-                      ? 'Chưa có nguồn tiền nào. Thêm ví ở Trang chủ trước rồi lưu giao dịch.'
-                      : 'Chưa có số tiền hợp lệ. Gõ lại kèm số tiền.'}
-                  </p>
-                )}
-
-                <div className="mt-4 flex gap-2">
-                  <button
-                    type="button"
-                    onClick={() => setCurrentPreview(null)}
-                    className="h-10 rounded-control border border-rule-strong bg-surface px-4 text-sm font-semibold text-ink hover:bg-paper-3 transition-colors"
-                  >
-                    Bỏ
-                  </button>
-                  <button
-                    type="button"
-                    onClick={handleConfirmSave}
-                    disabled={!canSave}
-                    className="flex h-10 flex-1 items-center justify-center gap-2 rounded-control bg-accent px-4 text-sm font-semibold text-accent-ink hover:bg-accent-hover disabled:opacity-55 transition-colors"
-                  >
-                    <Check className="w-4 h-4" aria-hidden="true" />
-                    <span>Lưu giao dịch</span>
-                  </button>
-                </div>
-              </div>
-            )}
 
             {speechError && (
               <p role="alert" className="mx-4 mb-2 flex items-center gap-2 rounded-control bg-expense-soft p-2.5 text-sm text-ink">
@@ -466,29 +552,32 @@ HÃY CẬP NHẬT LẠI VÀ CHỈ BÁO KẾT QUẢ NGẮN GỌN TRONG 1 CÂU THE
                   tabIndex={-1}
                   aria-hidden="true"
                 />
-                <button
-                  type="button"
-                  onClick={() => {
-                    // Typing it in by hand: swap the chat for the plain form
-                    closeAssistant();
-                    setManualOpen(true);
-                  }}
-                  className={iconButton}
-                  aria-label="Nhập tay"
-                  title="Nhập tay"
-                >
-                  <PenLine className="w-5 h-5" aria-hidden="true" />
-                </button>
-                <button
-                  type="button"
-                  onClick={() => fileInputRef.current?.click()}
-                  disabled={isProcessing}
-                  className={iconButton}
-                  aria-label="Gửi ảnh hóa đơn"
-                  title={canReadReceipts ? 'Chụp hoặc chọn ảnh hóa đơn' : 'Cần Gemini API key để đọc hóa đơn'}
-                >
-                  <Camera className="w-5 h-5" aria-hidden="true" />
-                </button>
+                <Tooltip content="Nhập tay">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      // Typing it in by hand: swap the chat for the plain form
+                      closeAssistant();
+                      setManualOpen(true);
+                    }}
+                    className={iconButton}
+                    aria-label="Nhập tay"
+                  >
+                    <PenLine className="w-5 h-5" aria-hidden="true" />
+                  </button>
+                </Tooltip>
+                <Tooltip content={canReadReceipts ? 'Chụp hoặc chọn ảnh hóa đơn' : 'Cần Gemini API key để đọc hóa đơn'}>
+                  <button
+                    type="button"
+                    onClick={() => fileInputRef.current?.click()}
+                    disabled={isProcessing}
+                    className={iconButton}
+                    aria-label="Gửi ảnh hóa đơn"
+                  >
+                    <Camera className="w-5 h-5" aria-hidden="true" />
+                  </button>
+                </Tooltip>
+                <Tooltip content={isListening ? 'Dừng ghi âm' : 'Nói bằng giọng nói'}>
 
                 <button
                   type="button"
@@ -499,6 +588,7 @@ HÃY CẬP NHẬT LẠI VÀ CHỈ BÁO KẾT QUẢ NGẮN GỌN TRONG 1 CÂU THE
                 >
                   {isListening ? <MicOff className="w-5 h-5" aria-hidden="true" /> : <Mic className="w-5 h-5" aria-hidden="true" />}
                 </button>
+                </Tooltip>
 
                 <label htmlFor="assistant-input" className="sr-only">
                   Nội dung giao dịch

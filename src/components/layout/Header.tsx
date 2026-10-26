@@ -3,6 +3,7 @@ import { Sun, Moon, ArrowLeft } from 'lucide-react';
 import { useWallet } from '../../context/WalletContext';
 import { useTheme } from '../../context/ThemeContext';
 import { NAV_ITEMS } from './navItems';
+import { Tooltip } from '../ui/Tooltip';
 
 export const Header: React.FC = () => {
   const { activeTab, setActiveTab } = useWallet();
@@ -31,15 +32,16 @@ export const Header: React.FC = () => {
           <h1 className="text-lg text-ink truncate">{title}</h1>
         </div>
 
-        <button
-          type="button"
-          onClick={toggleTheme}
-          className="grid h-10 w-10 place-items-center rounded-control text-muted hover:bg-paper-3 hover:text-ink transition-colors"
-          aria-label={isDark ? 'Chuyển sang giao diện sáng' : 'Chuyển sang giao diện tối'}
-          title={isDark ? 'Giao diện sáng' : 'Giao diện tối'}
-        >
-          {isDark ? <Sun className="w-[18px] h-[18px]" aria-hidden="true" /> : <Moon className="w-[18px] h-[18px]" aria-hidden="true" />}
-        </button>
+        <Tooltip content={isDark ? 'Giao diện sáng' : 'Giao diện tối'}>
+          <button
+            type="button"
+            onClick={toggleTheme}
+            className="grid h-10 w-10 place-items-center rounded-control text-muted hover:bg-paper-3 hover:text-ink transition-colors"
+            aria-label={isDark ? 'Chuyển sang giao diện sáng' : 'Chuyển sang giao diện tối'}
+          >
+            {isDark ? <Sun className="w-[18px] h-[18px]" aria-hidden="true" /> : <Moon className="w-[18px] h-[18px]" aria-hidden="true" />}
+          </button>
+        </Tooltip>
       </div>
     </header>
   );
