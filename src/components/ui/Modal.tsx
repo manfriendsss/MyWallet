@@ -1,4 +1,4 @@
-import React, { useId } from 'react';
+import React, { useEffect, useId, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import { X } from 'lucide-react';
@@ -27,11 +27,46 @@ export const Modal: React.FC<ModalProps> = ({
   const panelRef = useDialog(isOpen, onClose);
   const titleId = useId();
   const descId = useId();
+  const [mobileViewport, setMobileViewport] = useState<{ height: number; offsetTop: number } | null>(null);
+
+  // `dvh` is not updated consistently by every mobile browser while its
+  // keyboard is open. Anchor the sheet to the visual viewport instead, so the
+  // header stays reachable and the body becomes the only scrolling region.
+  useEffect(() => {
+    if (!isOpen) return;
+
+    const viewport = window.visualViewport;
+    const updateViewport = () => {
+      if (!viewport || !window.matchMedia('(max-width: 639px)').matches) {
+        setMobileViewport(null);
+        return;
+      }
+      setMobileViewport({ height: Math.round(viewport.height), offsetTop: Math.round(viewport.offsetTop) });
+    };
+
+    updateViewport();
+    viewport?.addEventListener('resize', updateViewport);
+    viewport?.addEventListener('scroll', updateViewport);
+    window.addEventListener('resize', updateViewport);
+    return () => {
+      viewport?.removeEventListener('resize', updateViewport);
+      viewport?.removeEventListener('scroll', updateViewport);
+      window.removeEventListener('resize', updateViewport);
+    };
+  }, [isOpen]);
+
+  const viewportOverlayStyle = mobileViewport
+    ? { top: mobileViewport.offsetTop, bottom: 'auto', height: mobileViewport.height }
+    : undefined;
+  const panelStyle = mobileViewport ? { maxHeight: Math.max(0, mobileViewport.height - 12) } : undefined;
 
   return createPortal(
     <AnimatePresence>
       {isOpen && (
-        <div className="fixed inset-0 z-[400] flex items-end sm:items-center justify-center sm:p-4">
+        <div
+          className="fixed inset-0 z-[400] flex items-end justify-center sm:items-center sm:p-4"
+          style={viewportOverlayStyle}
+        >
           {/* Backdrop */}
           <motion.div
             initial={{ opacity: 0 }}
@@ -55,6 +90,7 @@ export const Modal: React.FC<ModalProps> = ({
             animate={{ y: 0, scale: 1, opacity: 1 }}
             exit={isBottomSheetOnMobile ? { y: 24, opacity: 0 } : { scale: 0.98, opacity: 0 }}
             transition={{ duration: 0.2, ease: [0.16, 1, 0.3, 1] }}
+            style={panelStyle}
             className={cn(
               'relative w-full bg-surface shadow-[var(--shadow-overlay)] flex flex-col max-h-[92dvh] sm:max-h-[85dvh] outline-none',
               isBottomSheetOnMobile ? 'rounded-t-card sm:rounded-card' : 'rounded-card',
