@@ -487,10 +487,10 @@ HÃY CẬP NHẬT LẠI VÀ CHỈ BÁO KẾT QUẢ NGẮN GỌN TRONG 1 CÂU THE
             aria-modal="true"
             aria-labelledby={titleId}
             tabIndex={-1}
-            initial={{ y: 32, opacity: 0 }}
+            initial={{ y: '100%', opacity: 0.6 }}
             animate={{ y: 0, opacity: 1 }}
-            exit={{ y: 32, opacity: 0 }}
-            transition={{ duration: 0.22, ease: [0.16, 1, 0.3, 1] }}
+            exit={{ y: '100%', opacity: 0 }}
+            transition={{ duration: 0.28, ease: [0.16, 1, 0.3, 1] }}
             className="relative flex h-[88dvh] w-full max-w-xl flex-col overflow-hidden rounded-t-card bg-surface shadow-[var(--shadow-overlay)] outline-none sm:h-[80dvh] sm:rounded-card"
           >
             {/* Header */}

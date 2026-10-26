@@ -25,6 +25,11 @@ export const Modal: React.FC<ModalProps> = ({
   maxWidth = 'max-w-lg',
 }) => {
   const panelRef = useDialog(isOpen, onClose);
+  const dismiss = () => {
+    const active = document.activeElement;
+    if (active instanceof HTMLInputElement || active instanceof HTMLTextAreaElement || active instanceof HTMLSelectElement) active.blur();
+    onClose();
+  };
   const titleId = useId();
   const descId = useId();
   const [mobileViewport, setMobileViewport] = useState<{ height: number; offsetTop: number } | null>(null);
@@ -73,7 +78,7 @@ export const Modal: React.FC<ModalProps> = ({
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
             transition={{ duration: 0.15 }}
-            onClick={onClose}
+            onClick={dismiss}
             aria-hidden="true"
             className="fixed inset-0 bg-scrim"
           />
@@ -86,10 +91,10 @@ export const Modal: React.FC<ModalProps> = ({
             aria-labelledby={title ? titleId : undefined}
             aria-describedby={description ? descId : undefined}
             tabIndex={-1}
-            initial={isBottomSheetOnMobile ? { y: 24, opacity: 0 } : { scale: 0.98, opacity: 0 }}
+            initial={isBottomSheetOnMobile ? { y: '100%', opacity: 0.6 } : { scale: 0.98, opacity: 0 }}
             animate={{ y: 0, scale: 1, opacity: 1 }}
-            exit={isBottomSheetOnMobile ? { y: 24, opacity: 0 } : { scale: 0.98, opacity: 0 }}
-            transition={{ duration: 0.2, ease: [0.16, 1, 0.3, 1] }}
+            exit={isBottomSheetOnMobile ? { y: '100%', opacity: 0 } : { scale: 0.98, opacity: 0 }}
+            transition={{ duration: 0.28, ease: [0.16, 1, 0.3, 1] }}
             style={panelStyle}
             className={cn(
               'relative w-full bg-surface shadow-[var(--shadow-overlay)] flex flex-col max-h-[92dvh] sm:max-h-[85dvh] outline-none',
@@ -114,7 +119,7 @@ export const Modal: React.FC<ModalProps> = ({
                 </div>
                 <button
                   type="button"
-                  onClick={onClose}
+                  onClick={dismiss}
                   aria-label="Đóng"
                   className="-mr-2 -mt-1 grid h-10 w-10 shrink-0 place-items-center rounded-control text-muted hover:bg-paper-3 hover:text-ink transition-colors"
                 >

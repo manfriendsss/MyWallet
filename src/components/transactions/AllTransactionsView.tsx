@@ -308,7 +308,7 @@ export const AllTransactionsView: React.FC = () => {
               }}
               placeholder="Tìm ghi chú, danh mục, ví"
               className="field"
-              autoFocus
+              data-autofocus
             />
           </div>
 

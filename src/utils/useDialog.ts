@@ -41,6 +41,8 @@ export function useDialog(isOpen: boolean, onClose: () => void) {
     const onPopState = (event: PopStateEvent) => {
       if (asHistoryRecord(event.state)[DIALOG_HISTORY_KEY] === dialogId) return;
       ownsHistoryEntryRef.current = false;
+      const active = document.activeElement;
+      if (active instanceof HTMLElement && panelRef.current?.contains(active)) active.blur();
       onCloseRef.current();
     };
 
@@ -52,6 +54,7 @@ export function useDialog(isOpen: boolean, onClose: () => void) {
     if (!isOpen) return;
 
     const previouslyFocused = document.activeElement as HTMLElement | null;
+    const panel = panelRef.current;
     const previousOverflow = document.body.style.overflow;
     document.body.style.overflow = 'hidden';
 
@@ -66,6 +69,8 @@ export function useDialog(isOpen: boolean, onClose: () => void) {
     const onKeyDown = (e: KeyboardEvent) => {
       if (e.key === 'Escape') {
         e.stopPropagation();
+        const active = document.activeElement;
+        if (active instanceof HTMLElement && panelRef.current?.contains(active)) active.blur();
         onCloseRef.current();
         return;
       }
@@ -90,6 +95,10 @@ export function useDialog(isOpen: boolean, onClose: () => void) {
       cancelAnimationFrame(frame);
       document.removeEventListener('keydown', onKeyDown);
       document.body.style.overflow = previousOverflow;
+      // Android may briefly re-open the IME while an exiting sheet still owns
+      // an input. Blur before restoring the trigger's focus to keep close calm.
+      const active = document.activeElement;
+      if (active instanceof HTMLElement && panel?.contains(active)) active.blur();
       previouslyFocused?.focus?.();
     };
   }, [isOpen]);
