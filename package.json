@@ -17,6 +17,7 @@
     "@capacitor/app": "^8.1.2",
     "@capacitor/camera": "^8.2.6",
     "@capacitor/core": "^8.5.3",
+    "@capacitor/status-bar": "^8.0.4",
     "@simplewebauthn/browser": "^14.0.0",
     "@simplewebauthn/server": "^14.0.3",
     "canvas-confetti": "^1.9.4",

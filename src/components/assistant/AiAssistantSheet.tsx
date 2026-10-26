@@ -48,12 +48,7 @@ const ProviderPill: React.FC<{ provider: 'gemini' | 'deepseek' }> = ({ provider 
   );
 };
 
-interface AiAssistantSheetProps {
-  floating?: boolean;
-  onDismiss?: () => void;
-}
-
-export const AiAssistantSheet: React.FC<AiAssistantSheetProps> = ({ floating = false, onDismiss }) => {
+export const AiAssistantSheet: React.FC = () => {
   const {
     isAssistantOpen,
     closeAssistant,
@@ -82,11 +77,6 @@ export const AiAssistantSheet: React.FC<AiAssistantSheetProps> = ({ floating = f
   const recognitionRef = useRef<any>(null);
   const panelRef = useDialog(isAssistantOpen, closeAssistant);
   const titleId = useId();
-
-  const handleClose = () => {
-    closeAssistant();
-    onDismiss?.();
-  };
 
   const hasCloudAi =
     aiSettings.keySource === 'server' ||
@@ -366,7 +356,7 @@ HÃY CẬP NHẬT LẠI VÀ CHỈ BÁO KẾT QUẢ NGẮN GỌN TRONG 1 CÂU THE
     setCurrentPreview(null);
     receiptUpload.current = null;
     setMessages([]);
-    handleClose();
+    closeAssistant();
   };
 
   // Confirm and Save transaction
@@ -521,9 +511,9 @@ HÃY CẬP NHẬT LẠI VÀ CHỈ BÁO KẾT QUẢ NGẮN GỌN TRONG 1 CÂU THE
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
             transition={{ duration: 0.15 }}
-            onClick={handleClose}
+            onClick={closeAssistant}
             aria-hidden="true"
-            className={cn('fixed inset-0', floating ? 'bg-transparent' : 'bg-scrim')}
+            className="fixed inset-0 bg-scrim"
           />
 
           {/* Sheet */}
@@ -537,10 +527,7 @@ HÃY CẬP NHẬT LẠI VÀ CHỈ BÁO KẾT QUẢ NGẮN GỌN TRONG 1 CÂU THE
             animate={{ y: 0, opacity: 1 }}
             exit={{ y: 32, opacity: 0 }}
             transition={{ duration: 0.22, ease: [0.16, 1, 0.3, 1] }}
-            className={cn(
-              'relative flex w-full flex-col overflow-hidden bg-surface shadow-[var(--shadow-overlay)] outline-none',
-              floating ? 'h-full max-w-none rounded-card' : 'h-[88dvh] max-w-xl rounded-t-card sm:h-[80dvh] sm:rounded-card'
-            )}
+            className="relative flex h-[88dvh] w-full max-w-xl flex-col overflow-hidden rounded-t-card bg-surface shadow-[var(--shadow-overlay)] outline-none sm:h-[80dvh] sm:rounded-card"
           >
             {/* Header */}
             <div className="flex items-center justify-between gap-4 border-b border-rule px-5 pt-5 pb-4">
@@ -550,7 +537,7 @@ HÃY CẬP NHẬT LẠI VÀ CHỈ BÁO KẾT QUẢ NGẮN GỌN TRONG 1 CÂU THE
                 </h2>
                 {hasCloudAi && <ProviderPill provider={readingImage ? 'gemini' : aiSettings.provider} />}
               </div>
-              <button type="button" onClick={handleClose} aria-label="Đóng" className={cn(iconButton, '-mr-2 -mt-1')}>
+              <button type="button" onClick={closeAssistant} aria-label="Đóng" className={cn(iconButton, '-mr-2 -mt-1')}>
                 <X className="w-5 h-5" aria-hidden="true" />
               </button>
             </div>

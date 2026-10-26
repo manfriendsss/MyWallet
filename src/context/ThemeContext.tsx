@@ -1,4 +1,6 @@
 import React, { createContext, useContext, useEffect, useState } from 'react';
+import { Capacitor } from '@capacitor/core';
+import { StatusBar, Style } from '@capacitor/status-bar';
 
 type ThemeMode = 'dark' | 'light' | 'system';
 
@@ -27,6 +29,13 @@ function syncStatusBar(isDark: boolean) {
   }
   meta.content = isDark ? STATUS_BAR.dark : STATUS_BAR.light;
   document.documentElement.style.colorScheme = isDark ? 'dark' : 'light';
+
+  // Browser theme-color cannot change Android's icon contrast inside the APK.
+  // Light is dark text; Dark is light text in Capacitor's StatusBar API.
+  if (Capacitor.isNativePlatform()) {
+    void StatusBar.setStyle({ style: isDark ? Style.Dark : Style.Light });
+    void StatusBar.setBackgroundColor({ color: isDark ? STATUS_BAR.dark : STATUS_BAR.light });
+  }
 }
 
 export const ThemeProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
