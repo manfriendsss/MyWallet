@@ -280,8 +280,8 @@ export const WalletsCard: React.FC = () => {
         action={
           wallets.length >= 2 ? (
             <Tooltip content="Chuyển tiền giữa các nguồn tiền">
-              <Button type="button" variant="outline" size="sm" onClick={openTransferModal}>
-                Chuyển tiền
+              <Button type="button" variant="outline" size="icon" onClick={openTransferModal} aria-label="Chuyển tiền">
+                <ArrowLeftRight className="h-4 w-4" aria-hidden="true" />
               </Button>
             </Tooltip>
           ) : undefined
