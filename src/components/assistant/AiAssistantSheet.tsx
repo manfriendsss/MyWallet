@@ -15,6 +15,7 @@ import { receiptApi } from '../../services/api';
 import { TransactionFormModal } from '../transactions/TransactionForm';
 import { cn } from '../../utils/cn';
 import { Tooltip } from '../ui/Tooltip';
+import { walletByName, walletMentionedIn } from '../../utils/walletMatch';
 
 interface ChatMessage {
   id: string;
@@ -253,17 +254,19 @@ HÃY CẬP NHẬT LẠI VÀ CHỈ BÁO KẾT QUẢ NGẮN GỌN TRONG 1 CÂU THE
     }
   };
 
-  /** A wallet the AI named: exact name first, then a name containing it (the AI may shorten names) */
-  const findWallet = (name?: string) => {
-    const wanted = (name ?? '').trim().toLowerCase();
-    if (!wanted) return undefined;
-    return (
-      wallets.find((w) => w.name.toLowerCase() === wanted) ||
-      wallets.find((w) => w.name.toLowerCase().includes(wanted) || wanted.includes(w.name.toLowerCase()))
-    );
-  };
+  /** A wallet the AI named, tolerating shortened or reworded names ("Visa" for "Thẻ Visa VIB") */
+  const findWallet = (name?: string) => walletByName(name, wallets);
 
   const isTransfer = currentPreview?.type === 'transfer';
+  // Only an unnamed wallet falls back to one in the same currency (an unmatched name used to land in the
+  // first VND wallet, so card spending never showed up as card debt)
+  const entryWallet =
+    currentPreview && !isTransfer
+      ? findWallet(currentPreview.walletName) ||
+        walletMentionedIn(currentPreview.rawText ?? '', wallets) ||
+        wallets.find((w) => w.currency === currentPreview.currency && w.kind !== 'credit') ||
+        wallets[0]
+      : undefined;
   const transferFrom = isTransfer ? findWallet(currentPreview?.walletName) : undefined;
   const transferTo = isTransfer ? findWallet(currentPreview?.toWalletName) : undefined;
   const transferReady = Boolean(transferFrom && transferTo && transferFrom.id !== transferTo.id);
@@ -329,10 +332,7 @@ HÃY CẬP NHẬT LẠI VÀ CHỈ BÁO KẾT QUẢ NGẮN GỌN TRONG 1 CÂU THE
       categories[0];
 
     // Find wallet ID
-    const wallet =
-      wallets.find((w) => w.name.toLowerCase() === (currentPreview.walletName || '').toLowerCase()) ||
-      wallets.find((w) => w.currency === currentPreview.currency) ||
-      wallets[0];
+    const wallet = entryWallet ?? wallets[0];
 
     addTransaction({
       type: targetType,
@@ -409,7 +409,7 @@ HÃY CẬP NHẬT LẠI VÀ CHỈ BÁO KẾT QUẢ NGẮN GỌN TRONG 1 CÂU THE
               )}
               {previewRow('Loại', currentPreview.type === 'income' ? 'Thu nhập' : 'Chi tiêu')}
               {previewRow('Danh mục', currentPreview.categoryName)}
-              {previewRow('Nguồn tiền', currentPreview.walletName || 'Mặc định')}
+              {previewRow('Nguồn tiền', entryWallet?.name ?? (currentPreview.walletName || 'Mặc định'))}
             </>
           )}
           {currentPreview.note && (

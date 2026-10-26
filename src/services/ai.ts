@@ -2,6 +2,7 @@ import type { AiSettings, Category, CurrencyCode, ParsedTransactionFromAi, Trans
 import { isISODate, toLocalISODate } from '../utils/date';
 import { formatCurrency } from '../utils/formatters';
 import { getRate } from './currency';
+import { walletMentionedIn } from '../utils/walletMatch';
 
 export const GEMINI_MODELS = ['gemini-3.8-flash', 'gemini-3.7-flash', 'gemini-3.6-flash'] as const;
 export const DEEPSEEK_MODELS = ['deepseek-flash', 'deepseek-v4-pro'] as const;
@@ -158,6 +159,8 @@ HƯỚNG DẪN BÓC TÁCH:
 - Số tiền: hỗ trợ các từ viết tắt tiếng Việt ("k" = nghìn, "tr"/"triệu" = 1.000.000, "củ" = 1.000.000). Ví dụ: "65k" -> 65000, "15tr" -> 15000000.
 - Ngoại tệ: dùng đúng mã ISO 4217 của đồng tiền được nhắc tới hoặc in trên hóa đơn (đô -> "USD", euro -> "EUR", tệ/nhân dân tệ -> "CNY", yên -> "JPY", won -> "KRW", zloty -> "PLN", koruna -> "CZK", forint -> "HUF"...). Mặc định là "VND".
 - Nếu người dùng nhắc tới ví nào thì gán vào ví đó. Nếu không nhắc ví, chọn ví mặc định hợp lý với loại tiền tệ.
+- walletName PHẢI chép đúng nguyên văn một tên trong danh sách nguồn tiền ở trên, không viết tắt hay đổi tên.
+- Chi tiêu bằng thẻ tín dụng ("quẹt thẻ", "cà thẻ", "thẻ tín dụng", "trả bằng thẻ", tên ngân hàng của thẻ) thì walletName là nguồn tiền có ghi "thẻ tín dụng" trong danh sách. Đó vẫn là chi tiêu (type "expense"), khoản nợ thẻ tự tăng.
 - Nếu không khớp hoàn toàn với danh mục có sẵn, hãy gán vào danh mục gần nhất hoặc tạo tên danh mục phù hợp.
 - CHUYỂN TIỀN (type "transfer"): tiền đi từ một nguồn tiền của người dùng sang một nguồn tiền khác CŨNG của người dùng, không phải thu hay chi. Ví dụ: "chuyển 2tr từ Techcombank sang tiền mặt", "rút 500k ATM" (ngân hàng -> tiền mặt), "nạp 100 đô vào PayPal từ ngân hàng", "trả nợ thẻ 3tr" (sang ví thẻ tín dụng), "rút PayPal về ngân hàng". Khi đó walletName là nguồn tiền ĐI, toWalletName là nguồn tiền ĐẾN, cả hai phải là tên trong danh sách nguồn tiền ở trên; categoryName để "Chuyển tiền". amount và currency là số tiền rời nguồn đi. toAmount chỉ điền khi người dùng nói rõ số tiền nhận được (ví dụ tỷ giá khác), fee chỉ điền khi người dùng nói rõ phí (tính bằng tiền của nguồn đi); không thì để null. Chuyển tiền cho NGƯỜI KHÁC (mẹ, bạn, chủ nhà...) là chi tiêu, không phải chuyển tiền.
 - Ngày: Nếu nói "hôm qua", "hôm nay", tự tính toán ngày YYYY-MM-DD tương ứng. Hôm nay là ${toLocalISODate()}.`;
@@ -277,9 +280,10 @@ export function parseTransactionLocally(
   }
 
   // 4. Match Wallet
-  let matchedWallet = wallets.find((w) => lower.includes(w.name.toLowerCase()));
+  let matchedWallet = walletMentionedIn(text, wallets);
   if (!matchedWallet) {
-    matchedWallet = wallets.find((w) => w.currency === currency) || wallets[0];
+    // A card only when the sentence says so: unnamed spending defaults to an ordinary wallet
+    matchedWallet = wallets.find((w) => w.currency === currency && w.kind !== 'credit') || wallets[0];
   }
 
   // 5. Match Category
