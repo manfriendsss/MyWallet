@@ -116,7 +116,11 @@ export const RecentTransactionsCard: React.FC = () => {
       <TransactionDetailSheet
         isOpen={Boolean(selected)}
         onClose={() => setSelectedId(null)}
-        onEdit={() => selected && setEditing(selected)}
+        onEdit={() => {
+          if (!selected) return;
+          setEditing(selected);
+          setSelectedId(null);
+        }}
         transaction={selected}
         category={selected ? categories.find((category) => category.id === selected.categoryId) : undefined}
         wallet={selected ? wallets.find((wallet) => wallet.id === selected.walletId) : undefined}

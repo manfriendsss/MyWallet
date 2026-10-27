@@ -510,10 +510,10 @@ export const WalletProvider: React.FC<{ children: React.ReactNode; syncEnabled?:
     if (!from || !to || !(amount > 0) || from.id === to.id) return;
 
     const { amountVnd, rateUsed } = convertForWallet(amount, from, exchangeRates);
-    const toAmount =
-      options.toAmount !== undefined && options.toAmount > 0
-        ? options.toAmount
-        : previewTransferAmount(fromWalletId, toWalletId, amount);
+    const hasActualToAmount = options.toAmount !== undefined && options.toAmount > 0;
+    const toAmount = hasActualToAmount
+      ? options.toAmount
+      : previewTransferAmount(fromWalletId, toWalletId, amount);
     const now = new Date();
     const date = options.date ?? toLocalISODate(now);
     const time = now.toTimeString().slice(0, 5);
@@ -528,6 +528,7 @@ export const WalletProvider: React.FC<{ children: React.ReactNode; syncEnabled?:
       walletId: from.id,
       toWalletId: to.id,
       toAmount,
+      toAmountEstimated: from.currency !== to.currency && !hasActualToAmount,
       categoryId: '',
       date,
       time,

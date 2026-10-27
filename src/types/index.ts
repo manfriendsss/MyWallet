@@ -52,6 +52,8 @@ export interface Transaction {
   toWalletId?: string;
   /** Transfer only: the amount arriving, in the destination wallet's currency */
   toAmount?: number;
+  /** True when toAmount was calculated from the saved exchange rate rather than entered as the actual received amount. */
+  toAmountEstimated?: boolean;
   categoryId: string;
   date: string; // ISO string or YYYY-MM-DD
   time?: string; // HH:mm

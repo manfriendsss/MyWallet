@@ -1,5 +1,6 @@
 import { useEffect, useId, useRef } from 'react';
 import { asHistoryRecord, DIALOG_HISTORY_KEY } from './appHistory';
+import { lockPageScroll } from './pageScrollLock';
 
 const FOCUSABLE =
   'a[href], button:not([disabled]), input:not([disabled]):not([type="hidden"]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])';
@@ -7,14 +8,17 @@ const FOCUSABLE =
 /**
  * Dialog behaviour shared by Modal and the assistant sheet:
  * Escape closes, focus moves in on open, Tab stays inside, focus returns on close,
- * and the page behind stops scrolling.
+ * and the page behind stops scrolling while any dialog remains open.
  */
 export function useDialog(isOpen: boolean, onClose: () => void) {
   const panelRef = useRef<HTMLDivElement>(null);
   const onCloseRef = useRef(onClose);
   const dialogId = useId();
   const ownsHistoryEntryRef = useRef(false);
-  onCloseRef.current = onClose;
+
+  useEffect(() => {
+    onCloseRef.current = onClose;
+  }, [onClose]);
 
   // Every open dialog/sheet gets its own browser-history level. Android's back
   // gesture therefore dismisses the top overlay before navigating the page.
@@ -55,8 +59,7 @@ export function useDialog(isOpen: boolean, onClose: () => void) {
 
     const previouslyFocused = document.activeElement as HTMLElement | null;
     const panel = panelRef.current;
-    const previousOverflow = document.body.style.overflow;
-    document.body.style.overflow = 'hidden';
+    const unlockPageScroll = lockPageScroll();
 
     const focusFirst = () => {
       const panel = panelRef.current;
@@ -94,7 +97,7 @@ export function useDialog(isOpen: boolean, onClose: () => void) {
     return () => {
       cancelAnimationFrame(frame);
       document.removeEventListener('keydown', onKeyDown);
-      document.body.style.overflow = previousOverflow;
+      unlockPageScroll();
       // Android may briefly re-open the IME while an exiting sheet still owns
       // an input. Blur before restoring the trigger's focus to keep close calm.
       const active = document.activeElement;

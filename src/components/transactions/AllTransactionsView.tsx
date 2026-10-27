@@ -293,7 +293,11 @@ export const AllTransactionsView: React.FC = () => {
       <TransactionDetailSheet
         isOpen={Boolean(selected)}
         onClose={() => setSelectedId(null)}
-        onEdit={() => selected && setEditing(selected)}
+        onEdit={() => {
+          if (!selected) return;
+          setEditing(selected);
+          setSelectedId(null);
+        }}
         transaction={selected}
         category={selected ? categoryById.get(selected.categoryId) : undefined}
         wallet={selected ? walletById.get(selected.walletId) : undefined}

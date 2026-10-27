@@ -174,7 +174,7 @@ export const WalletsCard: React.FC = () => {
     if (!transferFrom || !transferTo || !(amount > 0)) return;
 
     addTransfer(transferFrom, transferTo, amount, {
-      toAmount: received > 0 ? received : undefined,
+      toAmount: receivedEdited && received > 0 ? received : undefined,
       fee: fee > 0 ? fee : undefined,
       date: transferDate,
       note: transferNote.trim() || undefined,

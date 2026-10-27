@@ -210,7 +210,7 @@ export const MonthlyCalendar: React.FC = () => {
                   {dayData && (
                     <>
                       {/* Phone cells are too narrow for full amounts: a mark per direction, the amounts open on tap */}
-                      <span className="mt-1 flex gap-1 sm:hidden" aria-hidden="true">
+                      <span className="mt-1 flex w-full justify-center gap-2 sm:hidden" aria-hidden="true">
                         {dayData.incomeVnd > 0 && <span className="h-1.5 w-1.5 rounded-full bg-income" />}
                         {dayData.expenseVnd > 0 && <span className="h-1.5 w-1.5 rounded-full bg-expense" />}
                       </span>
@@ -292,7 +292,11 @@ export const MonthlyCalendar: React.FC = () => {
       <TransactionDetailSheet
         isOpen={Boolean(selectedTransaction)}
         onClose={() => setSelectedTransactionId(null)}
-        onEdit={() => selectedTransaction && setEditing(selectedTransaction)}
+        onEdit={() => {
+          if (!selectedTransaction) return;
+          setEditing(selectedTransaction);
+          setSelectedTransactionId(null);
+        }}
         transaction={selectedTransaction}
         category={selectedTransaction ? categories.find((category) => category.id === selectedTransaction.categoryId) : undefined}
         wallet={selectedTransaction ? wallets.find((wallet) => wallet.id === selectedTransaction.walletId) : undefined}

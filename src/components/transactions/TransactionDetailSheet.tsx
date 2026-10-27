@@ -1,7 +1,6 @@
 import React from 'react';
 import {
   ArrowDown,
-  ArrowDownLeft,
   ArrowLeftRight,
   ArrowUp,
   CalendarDays,
@@ -70,6 +69,9 @@ export const TransactionDetailSheet: React.FC<TransactionDetailSheetProps> = ({
   const typeLabel = isTransfer ? 'Chuyển tiền' : isIncome ? 'Thu nhập' : 'Chi tiêu';
   const HeroStatusIcon = isTransfer ? ArrowLeftRight : isIncome ? ArrowUp : ArrowDown;
   const heroStatusTone = isTransfer ? 'text-muted' : isIncome ? 'text-income' : 'text-expense';
+  const receivedAmount = isTransfer && transaction.toAmount !== undefined && toWallet
+    ? formatCurrency(transaction.toAmount, toWallet.currency)
+    : null;
 
   const heroTile = isTransfer ? (
     <ColorTile color={toWallet?.color ?? wallet?.color} size="lg">
@@ -97,7 +99,11 @@ export const TransactionDetailSheet: React.FC<TransactionDetailSheetProps> = ({
           {heroTile}
           <div className="min-w-0 flex-1">
             <p className={cn('figure text-2xl font-bold', amountTone)}>{amount}</p>
-            {transaction.currency !== 'VND' && (
+            {receivedAmount ? (
+              <p className="figure mt-1 text-sm font-semibold text-muted">
+                {transaction.toAmountEstimated ? '≈ ' : ''}{receivedAmount}
+              </p>
+            ) : transaction.currency !== 'VND' && (
               <p className="figure mt-1 text-sm text-muted">≈ {formatCurrency(transaction.amountVnd, 'VND')}</p>
             )}
           </div>
@@ -155,17 +161,6 @@ export const TransactionDetailSheet: React.FC<TransactionDetailSheetProps> = ({
             </DetailRow>
           )}
 
-          {!isTransfer && wallet && transaction.walletAmount !== undefined && transaction.currency !== wallet.currency && (
-            <DetailRow icon={<ArrowLeftRight className="h-[18px] w-[18px]" />} label="Quy đổi vào thẻ">
-              {formatCurrency(transaction.walletAmount, wallet.currency)}
-            </DetailRow>
-          )}
-
-          {isTransfer && transaction.toAmount !== undefined && toWallet && (
-            <DetailRow icon={<ArrowDownLeft className="h-[18px] w-[18px]" />} label="Số tiền nhận">
-              {formatCurrency(transaction.toAmount, toWallet.currency)}
-            </DetailRow>
-          )}
         </dl>
 
         {transaction.receiptKey && (

@@ -49,7 +49,11 @@ export const TransactionFormModal: React.FC<TransactionFormModalProps> = ({
     setCurrency(transaction?.currency ?? wallets[0]?.currency ?? 'VND');
     setWalletId(transaction?.walletId ?? wallets[0]?.id ?? '');
     setToWalletId(transaction?.toWalletId ?? '');
-    setToAmount(transaction?.toAmount !== undefined ? String(transaction.toAmount) : '');
+    setToAmount(
+      transaction?.toAmount !== undefined && !transaction.toAmountEstimated
+        ? String(transaction.toAmount)
+        : ''
+    );
     setCategoryId(
       transaction && transaction.type !== 'transfer'
         ? transaction.categoryId
@@ -91,14 +95,16 @@ export const TransactionFormModal: React.FC<TransactionFormModalProps> = ({
         return;
       }
 
+      const hasActualToAmount = numericToAmount > 0;
       updateTransaction(transaction.id, {
         amount: numericAmount,
         currency: selectedFromWallet.currency,
         walletId: selectedFromWallet.id,
         toWalletId: selectedToWallet.id,
-        toAmount: numericToAmount > 0
+        toAmount: hasActualToAmount
           ? numericToAmount
           : previewTransferAmount(selectedFromWallet.id, selectedToWallet.id, numericAmount),
+        toAmountEstimated: selectedFromWallet.currency !== selectedToWallet.currency && !hasActualToAmount,
         date,
         note: note.trim() || undefined,
       });
