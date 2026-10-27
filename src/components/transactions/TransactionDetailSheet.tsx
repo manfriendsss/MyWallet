@@ -1,8 +1,9 @@
 import React from 'react';
 import {
+  ArrowDown,
   ArrowDownLeft,
   ArrowLeftRight,
-  ArrowUpRight,
+  ArrowUp,
   CalendarDays,
   Clock3,
   Image as ImageIcon,
@@ -67,6 +68,8 @@ export const TransactionDetailSheet: React.FC<TransactionDetailSheetProps> = ({
     : formatSigned(transaction.amount, transaction.currency, isIncome ? '+' : '−');
   const amountTone = isTransfer ? 'text-ink' : isIncome ? 'text-income' : 'text-expense';
   const typeLabel = isTransfer ? 'Chuyển tiền' : isIncome ? 'Thu nhập' : 'Chi tiêu';
+  const HeroStatusIcon = isTransfer ? ArrowLeftRight : isIncome ? ArrowUp : ArrowDown;
+  const heroStatusTone = isTransfer ? 'text-muted' : isIncome ? 'text-income' : 'text-expense';
 
   const heroTile = isTransfer ? (
     <ColorTile color={toWallet?.color ?? wallet?.color} size="lg">
@@ -81,7 +84,16 @@ export const TransactionDetailSheet: React.FC<TransactionDetailSheetProps> = ({
   return (
     <Modal isOpen={isOpen} onClose={onClose} title={title} description={typeLabel} maxWidth="max-w-md">
       <div className="space-y-4">
-        <div className="flex items-center gap-4 rounded-card border border-rule bg-paper-2 p-4">
+        <div
+          className={cn(
+            'flex items-center gap-4 rounded-card border bg-paper-2 p-4',
+            isTransfer
+              ? 'border-rule'
+              : isIncome
+                ? 'border-income shadow-[0_0_18px_-10px_var(--color-income)]'
+                : 'border-expense shadow-[0_0_18px_-10px_var(--color-expense)]'
+          )}
+        >
           {heroTile}
           <div className="min-w-0 flex-1">
             <p className={cn('figure text-2xl font-bold', amountTone)}>{amount}</p>
@@ -89,6 +101,7 @@ export const TransactionDetailSheet: React.FC<TransactionDetailSheetProps> = ({
               <p className="figure mt-1 text-sm text-muted">≈ {formatCurrency(transaction.amountVnd, 'VND')}</p>
             )}
           </div>
+          <HeroStatusIcon className={cn('h-8 w-8 shrink-0', heroStatusTone)} strokeWidth={2.25} aria-hidden="true" />
         </div>
 
         <dl className="grid grid-cols-2 gap-2">
@@ -141,17 +154,6 @@ export const TransactionDetailSheet: React.FC<TransactionDetailSheetProps> = ({
               {transaction.time}
             </DetailRow>
           )}
-
-          <DetailRow
-            icon={isTransfer
-              ? <ArrowLeftRight className="h-[18px] w-[18px]" />
-              : isIncome
-                ? <ArrowDownLeft className="h-[18px] w-[18px]" />
-                : <ArrowUpRight className="h-[18px] w-[18px]" />}
-            label="Loại giao dịch"
-          >
-            {typeLabel}
-          </DetailRow>
 
           {!isTransfer && wallet && transaction.walletAmount !== undefined && transaction.currency !== wallet.currency && (
             <DetailRow icon={<ArrowLeftRight className="h-[18px] w-[18px]" />} label="Quy đổi vào thẻ">
