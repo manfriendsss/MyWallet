@@ -91,7 +91,6 @@ export const CategoriesCard: React.FC = () => {
     setIsFormOpen(false);
   };
 
-  const countOf = (type: TransactionType) => categories.filter((c) => c.type === type).length;
   const formType = editing?.type ?? activeTab;
 
   return (
@@ -105,8 +104,8 @@ export const CategoriesCard: React.FC = () => {
       {/* Full-width tabs; the pill flows between them like the transaction filter */}
       <ToneTabs
         tabs={[
-          { id: 'expense', label: `Chi tiêu (${countOf('expense')})`, tone: 'expense' },
-          { id: 'income', label: `Thu nhập (${countOf('income')})`, tone: 'income' },
+          { id: 'expense', label: 'Chi tiêu', tone: 'expense' },
+          { id: 'income', label: 'Thu nhập', tone: 'income' },
         ]}
         value={activeTab}
         onChange={setActiveTab}

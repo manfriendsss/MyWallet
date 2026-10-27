@@ -137,7 +137,7 @@ export function recalculateWalletBalances(
     if (id && balances.has(id)) balances.set(id, (balances.get(id) ?? 0) + delta);
   };
   for (const tx of transactions) {
-    const amount = Number(tx.amount) || 0;
+    const amount = Number(tx.walletAmount ?? tx.amount) || 0;
     if (tx.type === 'income') add(tx.walletId, amount);
     else if (tx.type === 'expense') add(tx.walletId, -amount);
     else if (tx.type === 'transfer') {

@@ -276,7 +276,7 @@ export const WalletsCard: React.FC = () => {
     <Card aria-labelledby="wallets-heading" className="flex flex-col">
       <CardHeader
         id="wallets-heading"
-        title={`Nguồn tiền (${wallets.length})`}
+        title="Nguồn tiền"
         art={CARD_ART.wallets}
         action={
           wallets.length >= 2 ? (

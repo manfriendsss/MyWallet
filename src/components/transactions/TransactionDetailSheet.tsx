@@ -33,14 +33,14 @@ const DetailRow: React.FC<{
   children: React.ReactNode;
   tile?: React.ReactNode;
 }> = ({ icon, label, children, tile }) => (
-  <div className="flex min-w-0 items-center gap-3 rounded-control bg-paper-2 px-3 py-3">
+  <div className="flex min-h-[4.25rem] min-w-0 items-center gap-2.5 rounded-control bg-paper-2 px-2.5 py-2.5">
     {tile ?? (
-      <span className="grid h-9 w-9 shrink-0 place-items-center rounded-control bg-surface text-muted shadow-sm">
+      <span className="grid h-7 w-7 shrink-0 place-items-center rounded-chip bg-surface text-muted">
         {icon}
       </span>
     )}
     <div className="min-w-0 flex-1">
-      <dt className="text-xs font-medium text-muted">{label}</dt>
+      <dt className="truncate text-xs font-medium text-muted">{label}</dt>
       <dd className="mt-0.5 truncate text-sm font-semibold text-ink">{children}</dd>
     </div>
   </div>
@@ -80,7 +80,7 @@ export const TransactionDetailSheet: React.FC<TransactionDetailSheetProps> = ({
 
   return (
     <Modal isOpen={isOpen} onClose={onClose} title={title} description={typeLabel} maxWidth="max-w-md">
-      <div className="space-y-5">
+      <div className="space-y-4">
         <div className="flex items-center gap-4 rounded-card border border-rule bg-paper-2 p-4">
           {heroTile}
           <div className="min-w-0 flex-1">
@@ -91,14 +91,14 @@ export const TransactionDetailSheet: React.FC<TransactionDetailSheetProps> = ({
           </div>
         </div>
 
-        <dl className="grid gap-2 sm:grid-cols-2">
+        <dl className="grid grid-cols-2 gap-2">
           {!isTransfer && category && (
             <DetailRow
               icon={null}
               label="Danh mục"
               tile={(
-                <ColorTile color={category.color}>
-                  <IconRenderer name={category.icon} className="h-[18px] w-[18px]" />
+                <ColorTile color={category.color} size="sm">
+                  <IconRenderer name={category.icon} className="h-4 w-4" />
                 </ColorTile>
               )}
             >
@@ -110,8 +110,8 @@ export const TransactionDetailSheet: React.FC<TransactionDetailSheetProps> = ({
             icon={null}
             label={isTransfer ? 'Từ nguồn tiền' : 'Nguồn tiền'}
             tile={(
-              <ColorTile color={wallet?.color}>
-                <IconRenderer name={wallet?.icon || 'Wallet'} className="h-[18px] w-[18px]" />
+              <ColorTile color={wallet?.color} size="sm">
+                <IconRenderer name={wallet?.icon || 'Wallet'} className="h-4 w-4" />
               </ColorTile>
             )}
           >
@@ -123,8 +123,8 @@ export const TransactionDetailSheet: React.FC<TransactionDetailSheetProps> = ({
               icon={null}
               label="Đến nguồn tiền"
               tile={(
-                <ColorTile color={toWallet?.color}>
-                  <IconRenderer name={toWallet?.icon || 'Wallet'} className="h-[18px] w-[18px]" />
+                <ColorTile color={toWallet?.color} size="sm">
+                  <IconRenderer name={toWallet?.icon || 'Wallet'} className="h-4 w-4" />
                 </ColorTile>
               )}
             >
@@ -152,6 +152,12 @@ export const TransactionDetailSheet: React.FC<TransactionDetailSheetProps> = ({
           >
             {typeLabel}
           </DetailRow>
+
+          {!isTransfer && wallet && transaction.walletAmount !== undefined && transaction.currency !== wallet.currency && (
+            <DetailRow icon={<ArrowLeftRight className="h-[18px] w-[18px]" />} label="Quy đổi vào thẻ">
+              {formatCurrency(transaction.walletAmount, wallet.currency)}
+            </DetailRow>
+          )}
 
           {isTransfer && transaction.toAmount !== undefined && toWallet && (
             <DetailRow icon={<ArrowDownLeft className="h-[18px] w-[18px]" />} label="Số tiền nhận">

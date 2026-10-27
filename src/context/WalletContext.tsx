@@ -12,6 +12,7 @@ import {
   getStoredExchangeRates,
   saveStoredExchangeRates,
   convertToVnd,
+  convertCurrency,
   convertForWallet,
   fetchLiveExchangeRates,
   isRatesStale,
@@ -405,13 +406,24 @@ export const WalletProvider: React.FC<{ children: React.ReactNode; syncEnabled?:
       : convertToVnd(amount, currency, exchangeRates);
   };
 
+  /** Amount that affects the wallet's own balance, which can differ for foreign-currency card purchases. */
+  const toWalletAmount = (amount: number, currency: string, walletId: string) => {
+    const wallet = wallets.find((candidate) => candidate.id === walletId);
+    if (!wallet || wallet.currency === currency) return amount;
+    return convertCurrency(amount, currency, wallet.currency, exchangeRates);
+  };
+
   // Transactions Actions
   const addTransaction = (
     txData: Omit<Transaction, 'id' | 'amountVnd' | 'exchangeRate' | 'createdAt'>
   ): Transaction => {
     const { amountVnd, rateUsed } = toVndFor(txData.amount, txData.currency, txData.walletId);
+    const walletAmount = txData.type === 'transfer'
+      ? undefined
+      : toWalletAmount(txData.amount, txData.currency, txData.walletId);
     const newTx: Transaction = {
       ...txData,
+      walletAmount,
       id: newId('tx'),
       amountVnd,
       exchangeRate: rateUsed,
@@ -429,6 +441,7 @@ export const WalletProvider: React.FC<{ children: React.ReactNode; syncEnabled?:
 
     let amountVnd = target.amountVnd;
     let exchangeRate = target.exchangeRate;
+    let walletAmount = target.walletAmount;
 
     if (updates.amount !== undefined || updates.currency !== undefined) {
       const curr = updates.currency || target.currency;
@@ -438,8 +451,20 @@ export const WalletProvider: React.FC<{ children: React.ReactNode; syncEnabled?:
       exchangeRate = converted.rateUsed;
     }
 
+    const nextType = updates.type ?? target.type;
+    if (
+      nextType !== 'transfer' &&
+      (updates.amount !== undefined || updates.currency !== undefined || updates.walletId !== undefined)
+    ) {
+      walletAmount = toWalletAmount(
+        updates.amount ?? target.amount,
+        updates.currency ?? target.currency,
+        updates.walletId ?? target.walletId
+      );
+    }
+
     const newTxs = transactions.map((t) =>
-      t.id === id ? { ...t, ...updates, amountVnd, exchangeRate } : t
+      t.id === id ? { ...t, ...updates, amountVnd, exchangeRate, walletAmount } : t
     );
     syncState(wallets, newTxs);
   };

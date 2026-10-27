@@ -108,6 +108,25 @@ export function convertToVnd(
   return { amountVnd: Math.round(amount * rate), rateUsed: rate };
 }
 
+const ZERO_DECIMAL_CURRENCIES = new Set(['VND', 'JPY', 'KRW', 'HUF']);
+
+/** Convert between two supported currencies while preserving the amount charged to a wallet. */
+export function convertCurrency(
+  amount: number,
+  fromCurrency: CurrencyCode,
+  toCurrency: CurrencyCode,
+  rates: ExchangeRates = getStoredExchangeRates()
+): number {
+  if (fromCurrency === toCurrency) return amount;
+  const fromRate = getRate(fromCurrency, rates);
+  const toRate = getRate(toCurrency, rates);
+  if (!fromRate || !toRate) return 0;
+  const converted = (amount * fromRate) / toRate;
+  return ZERO_DECIMAL_CURRENCIES.has(toCurrency)
+    ? Math.round(converted)
+    : Math.round(converted * 100) / 100;
+}
+
 /** PayPal converts at about 97% of the market rate (its spread), not the bank rate */
 export const PAYPAL_RATE_FACTOR = 0.97;
 

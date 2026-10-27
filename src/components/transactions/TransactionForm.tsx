@@ -3,6 +3,7 @@ import type { Transaction, TransactionType } from '../../types';
 import { useWallet } from '../../context/WalletContext';
 import { toLocalISODate } from '../../utils/date';
 import { receiptApi } from '../../services/api';
+import { currencyName, getCurrencyOptions } from '../../services/currency';
 import { formatCurrency } from '../../utils/formatters';
 import { Button } from '../ui/Button';
 import { MoneyInput } from '../ui/MoneyInput';
@@ -28,9 +29,10 @@ export const TransactionFormModal: React.FC<TransactionFormModalProps> = ({
   onClose,
   transaction,
 }) => {
-  const { wallets, categories, addTransaction, updateTransaction, previewTransferAmount } = useWallet();
+  const { wallets, categories, exchangeRates, addTransaction, updateTransaction, previewTransferAmount } = useWallet();
   const [type, setType] = useState<TransactionType>('expense');
   const [amount, setAmount] = useState('');
+  const [currency, setCurrency] = useState('VND');
   const [walletId, setWalletId] = useState('');
   const [toWalletId, setToWalletId] = useState('');
   const [toAmount, setToAmount] = useState('');
@@ -44,6 +46,7 @@ export const TransactionFormModal: React.FC<TransactionFormModalProps> = ({
     const nextType = transaction?.type === 'income' ? 'income' : 'expense';
     setType(nextType);
     setAmount(transaction ? String(transaction.amount) : '');
+    setCurrency(transaction?.currency ?? wallets[0]?.currency ?? 'VND');
     setWalletId(transaction?.walletId ?? wallets[0]?.id ?? '');
     setToWalletId(transaction?.toWalletId ?? '');
     setToAmount(transaction?.toAmount !== undefined ? String(transaction.toAmount) : '');
@@ -65,6 +68,12 @@ export const TransactionFormModal: React.FC<TransactionFormModalProps> = ({
     () => wallets.map((wallet) => ({ value: wallet.id, label: wallet.name, hint: wallet.currency })),
     [wallets]
   );
+  const allCurrencyOptions = useMemo(() => getCurrencyOptions(exchangeRates), [exchangeRates]);
+  const walletCurrencies = useMemo(() => new Set(wallets.map((wallet) => wallet.currency)), [wallets]);
+  const currencyOptions = selectedWallet?.kind === 'credit'
+    ? allCurrencyOptions
+    : allCurrencyOptions.filter((option) => walletCurrencies.has(option.value));
+  const isForeignCardPurchase = selectedWallet?.kind === 'credit' && currency !== selectedWallet.currency;
 
   if (transaction?.type === 'transfer') {
     const fromWallet = wallets.find((wallet) => wallet.id === transaction.walletId);
@@ -225,7 +234,7 @@ export const TransactionFormModal: React.FC<TransactionFormModalProps> = ({
     const values = {
       type,
       amount: numericAmount,
-      currency: selectedWallet.currency,
+      currency,
       walletId: selectedWallet.id,
       categoryId,
       date,
@@ -249,35 +258,66 @@ export const TransactionFormModal: React.FC<TransactionFormModalProps> = ({
         <div>
           <label htmlFor="transaction-amount" className="label flex items-center justify-between gap-3">
             <span>Số tiền</span>
-            <span className="text-muted">{selectedWallet?.currency ?? ''}</span>
+            <span className="text-muted">{currency}</span>
           </label>
           <MoneyInput
             id="transaction-amount"
             required
             value={amount}
-            currency={selectedWallet?.currency}
+            currency={currency}
             onValueChange={setAmount}
             className="field text-2xl"
           />
         </div>
 
-        <div>
-          <label htmlFor="transaction-wallet" className="label">Ví</label>
-          <Select
-            id="transaction-wallet"
-            value={walletId}
-            options={walletOptions}
-            onChange={(value) => {
-              setWalletId(value);
-              setError('');
-            }}
-            searchable
-          />
+        <div className="grid grid-cols-2 gap-3">
+          <div className="min-w-0">
+            <label htmlFor="transaction-currency" className="label">Loại tiền</label>
+            <Select
+              id="transaction-currency"
+              value={currency}
+              options={currencyOptions}
+              onChange={(value) => {
+                if (selectedWallet?.kind === 'credit') {
+                  setCurrency(value);
+                } else {
+                  const matchingWallet = wallets.find((wallet) => wallet.currency === value);
+                  if (matchingWallet) {
+                    setWalletId(matchingWallet.id);
+                    setCurrency(value);
+                  }
+                }
+                setError('');
+              }}
+              searchable
+              searchPlaceholder="Tìm loại tiền…"
+            />
+          </div>
+          <div className="min-w-0">
+            <label htmlFor="transaction-wallet" className="label">Nguồn tiền</label>
+            <Select
+              id="transaction-wallet"
+              value={walletId}
+              options={walletOptions}
+              onChange={(value) => {
+                setWalletId(value);
+                const nextWallet = wallets.find((wallet) => wallet.id === value);
+                if (nextWallet?.kind !== 'credit') setCurrency(nextWallet?.currency ?? 'VND');
+                setError('');
+              }}
+              searchable
+            />
+          </div>
         </div>
+        {isForeignCardPurchase && (
+          <p className="hint -mt-2">
+            Khoản {currencyName(currency)} này sẽ được quy đổi vào dư nợ {selectedWallet.currency} của thẻ.
+          </p>
+        )}
 
         <fieldset>
           <legend className="label">Danh mục</legend>
-          <div className="grid grid-cols-4 gap-2">
+          <div className="grid grid-cols-3 gap-2 sm:grid-cols-4">
             {filteredCategories.map((category) => {
               const selected = category.id === categoryId;
               return (
@@ -289,14 +329,16 @@ export const TransactionFormModal: React.FC<TransactionFormModalProps> = ({
                     setCategoryId(category.id);
                     setError('');
                   }}
-                  className={`flex min-h-20 flex-col items-center justify-center gap-1.5 rounded-control px-1.5 py-2 text-ink transition-shadow ${
-                    selected ? 'ring-2 ring-accent' : 'hover:bg-paper-2'
+                  className={`flex h-24 w-full flex-col items-center justify-center gap-2 rounded-control px-2 py-2.5 text-ink transition-[background-color,box-shadow] ${
+                    selected ? 'bg-paper-2 ring-2 ring-accent' : 'hover:bg-paper-2'
                   }`}
                 >
-                  <ColorTile color={category.color} size="sm">
-                    <IconRenderer name={category.icon} className="h-4 w-4" />
+                  <ColorTile color={category.color}>
+                    <IconRenderer name={category.icon} className="h-[18px] w-[18px]" />
                   </ColorTile>
-                  <span className="line-clamp-2 text-xs">{category.name}</span>
+                  <span className="line-clamp-2 flex min-h-9 items-center text-center text-sm font-medium leading-tight">
+                    {category.name}
+                  </span>
                 </button>
               );
             })}

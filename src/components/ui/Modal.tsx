@@ -5,6 +5,56 @@ import { X } from 'lucide-react';
 import { cn } from '../../utils/cn';
 import { useDialog } from '../../utils/useDialog';
 
+let openModalCount = 0;
+let lockedScrollY = 0;
+let savedBodyStyle: Pick<CSSStyleDeclaration, 'position' | 'top' | 'left' | 'right' | 'width' | 'overflow'> | null = null;
+let savedRootStyle: Pick<CSSStyleDeclaration, 'overflow' | 'overscrollBehavior'> | null = null;
+
+const lockPageScroll = () => {
+  if (openModalCount === 0) {
+    const body = document.body;
+    const root = document.documentElement;
+
+    lockedScrollY = window.scrollY;
+    savedBodyStyle = {
+      position: body.style.position,
+      top: body.style.top,
+      left: body.style.left,
+      right: body.style.right,
+      width: body.style.width,
+      overflow: body.style.overflow,
+    };
+    savedRootStyle = {
+      overflow: root.style.overflow,
+      overscrollBehavior: root.style.overscrollBehavior,
+    };
+
+    Object.assign(body.style, {
+      position: 'fixed',
+      top: `-${lockedScrollY}px`,
+      left: '0',
+      right: '0',
+      width: '100%',
+      overflow: 'hidden',
+    });
+    root.style.overflow = 'hidden';
+    root.style.overscrollBehavior = 'none';
+  }
+
+  openModalCount += 1;
+
+  return () => {
+    openModalCount = Math.max(0, openModalCount - 1);
+    if (openModalCount > 0 || !savedBodyStyle || !savedRootStyle) return;
+
+    Object.assign(document.body.style, savedBodyStyle);
+    Object.assign(document.documentElement.style, savedRootStyle);
+    savedBodyStyle = null;
+    savedRootStyle = null;
+    window.scrollTo(0, lockedScrollY);
+  };
+};
+
 interface ModalProps {
   isOpen: boolean;
   onClose: () => void;
@@ -33,6 +83,11 @@ export const Modal: React.FC<ModalProps> = ({
   const titleId = useId();
   const descId = useId();
   const [mobileViewport, setMobileViewport] = useState<{ height: number; offsetTop: number } | null>(null);
+
+  useEffect(() => {
+    if (!isOpen) return;
+    return lockPageScroll();
+  }, [isOpen]);
 
   // `dvh` is not updated consistently by every mobile browser while its
   // keyboard is open. Anchor the sheet to the visual viewport instead, so the
@@ -69,7 +124,7 @@ export const Modal: React.FC<ModalProps> = ({
     <AnimatePresence>
       {isOpen && (
         <div
-          className="fixed inset-0 z-[400] flex items-end justify-center sm:items-center sm:p-4"
+          className="fixed inset-0 z-[400] flex items-end justify-center overscroll-none sm:items-center sm:p-4"
           style={viewportOverlayStyle}
         >
           {/* Backdrop */}
@@ -129,7 +184,7 @@ export const Modal: React.FC<ModalProps> = ({
             )}
 
             {/* Body */}
-            <div className="px-5 sm:px-6 py-5 overflow-y-auto flex-1 pb-[max(1.25rem,env(safe-area-inset-bottom))]">
+            <div className="flex-1 touch-pan-y overflow-y-auto overscroll-contain px-5 py-5 pb-[max(1.25rem,env(safe-area-inset-bottom))] sm:px-6">
               {children}
             </div>
           </motion.div>

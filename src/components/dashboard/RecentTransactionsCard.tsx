@@ -63,10 +63,10 @@ export const RecentTransactionsCard: React.FC = () => {
       <Card aria-labelledby="recent-heading" className="flex flex-col">
         <CardHeader
           id="recent-heading"
-          title="Giao dịch gần đây"
+          title="Giao dịch"
           art={CARD_ART.receipt}
           action={(
-            <Button variant="ghost" size="sm" onClick={() => setActiveTab('transactions')}>
+            <Button variant="outline" size="sm" onClick={() => setActiveTab('transactions')}>
               Xem tất cả
             </Button>
           )}

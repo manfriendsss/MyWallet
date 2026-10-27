@@ -44,6 +44,8 @@ export interface Transaction {
   currency: CurrencyCode;
   amountVnd: number; // converted to VND at the time of creation
   exchangeRate: number; // rate used: 1 unit of currency = X VND
+  /** Amount applied to the source wallet balance when the purchase currency differs (for example, a foreign-currency card charge). */
+  walletAmount?: number;
   /** For a transfer: the wallet the money leaves */
   walletId: string;
   /** Transfer only: the wallet the money arrives in */
