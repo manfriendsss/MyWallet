@@ -118,8 +118,10 @@ export const RecentTransactionsCard: React.FC = () => {
         onClose={() => setSelectedId(null)}
         onEdit={() => {
           if (!selected) return;
-          setEditing(selected);
           setSelectedId(null);
+          window.requestAnimationFrame(() => {
+            window.requestAnimationFrame(() => setEditing(selected));
+          });
         }}
         transaction={selected}
         category={selected ? categories.find((category) => category.id === selected.categoryId) : undefined}

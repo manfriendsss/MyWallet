@@ -294,8 +294,10 @@ export const MonthlyCalendar: React.FC = () => {
         onClose={() => setSelectedTransactionId(null)}
         onEdit={() => {
           if (!selectedTransaction) return;
-          setEditing(selectedTransaction);
           setSelectedTransactionId(null);
+          window.requestAnimationFrame(() => {
+            window.requestAnimationFrame(() => setEditing(selectedTransaction));
+          });
         }}
         transaction={selectedTransaction}
         category={selectedTransaction ? categories.find((category) => category.id === selectedTransaction.categoryId) : undefined}

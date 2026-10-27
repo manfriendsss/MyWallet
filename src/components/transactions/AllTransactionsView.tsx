@@ -295,8 +295,12 @@ export const AllTransactionsView: React.FC = () => {
         onClose={() => setSelectedId(null)}
         onEdit={() => {
           if (!selected) return;
-          setEditing(selected);
           setSelectedId(null);
+          // Let the detail sheet remove its own history entry before the edit
+          // form pushes a new one; otherwise the pending popstate closes it.
+          window.requestAnimationFrame(() => {
+            window.requestAnimationFrame(() => setEditing(selected));
+          });
         }}
         transaction={selected}
         category={selected ? categoryById.get(selected.categoryId) : undefined}
