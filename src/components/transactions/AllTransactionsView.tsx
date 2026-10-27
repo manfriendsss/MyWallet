@@ -102,7 +102,7 @@ export const AllTransactionsView: React.FC = () => {
     [categories]
   );
 
-  const filteredTransactions = useMemo(() => {
+  const matchingTransactions = useMemo(() => {
     const query = normalizeSearch(search.trim());
 
     return transactions
@@ -116,7 +116,6 @@ export const AllTransactionsView: React.FC = () => {
         const transactionDate = tx.date.slice(0, 10);
 
         if (query && !searchableText.includes(query)) return false;
-        if (typeFilter !== 'all' && tx.type !== typeFilter) return false;
         if (walletFilter !== 'all' && tx.walletId !== walletFilter && tx.toWalletId !== walletFilter) return false;
         if (categoryFilter !== 'all' && tx.categoryId !== categoryFilter) return false;
         if (dateBounds.from && transactionDate < dateBounds.from) return false;
@@ -129,19 +128,26 @@ export const AllTransactionsView: React.FC = () => {
           (b.time ?? '').localeCompare(a.time ?? '') ||
           b.createdAt.localeCompare(a.createdAt)
       );
-  }, [transactions, walletById, categoryById, search, typeFilter, walletFilter, categoryFilter, dateBounds]);
+  }, [transactions, walletById, categoryById, search, walletFilter, categoryFilter, dateBounds]);
+
+  const filteredTransactions = useMemo(
+    () => typeFilter === 'all'
+      ? matchingTransactions
+      : matchingTransactions.filter((transaction) => transaction.type === typeFilter),
+    [matchingTransactions, typeFilter]
+  );
 
   const totals = useMemo(() => {
     let income = 0;
     let expense = 0;
 
-    for (const tx of filteredTransactions) {
+    for (const tx of matchingTransactions) {
       if (tx.type === 'income') income += tx.amountVnd;
       if (tx.type === 'expense') expense += tx.amountVnd;
     }
 
     return { income, expense };
-  }, [filteredTransactions]);
+  }, [matchingTransactions]);
 
   const filterPeriodLabel = useMemo(() => {
     const quickLabel = QUICK_RANGES.find((range) => range.id === dateRange)?.label;
