@@ -100,12 +100,15 @@ export interface AiSettings {
 }
 
 export interface ParsedTransactionFromAi {
+  action?: 'transaction' | 'adjust_wallet';
   type: EntryType;
   amount: number;
   currency: CurrencyCode;
   categoryName: string;
-  /** For a transfer: the wallet the money leaves */
+  /** For a transfer: the wallet the money leaves; for adjust_wallet: the wallet being adjusted */
   walletName?: string;
+  /** For adjust_wallet: the new balance to set */
+  targetBalance?: number;
   /** Transfers only: the wallet the money arrives in, what arrived there and any fee (in the source currency) */
   toWalletName?: string;
   toAmount?: number;

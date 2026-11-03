@@ -52,7 +52,9 @@ export const AiAssistantSheet: React.FC = () => {
     closeAssistant,
     categories,
     wallets,
+    transactions,
     addTransaction,
+    updateWallet,
     addTransfer,
     previewTransferAmount,
     aiSettings,
@@ -90,7 +92,7 @@ export const AiAssistantSheet: React.FC = () => {
         {
           id: 'welcome',
           sender: 'ai',
-          text: 'Nói, gõ hoặc gửi ảnh hóa đơn. Tôi sẽ ghi vào đúng danh mục và nguồn tiền.',
+          text: 'Nói, gõ chi tiêu, chuyển tiền hoặc yêu cầu sửa nguồn tiền (ví dụ: "sửa ví tiền mặt thành 1 triệu").',
         },
       ]);
     }
@@ -274,11 +276,14 @@ HÃY CẬP NHẬT LẠI VÀ CHỈ BÁO KẾT QUẢ NGẮN GỌN TRONG 1 CÂU THE
     return available[0] || named || wallets.find((wallet) => wallet.currency === preview.currency && wallet.kind !== 'credit') || wallets[0];
   };
 
-  const isTransfer = currentPreview?.type === 'transfer';
+  const isWalletAdjustment = currentPreview?.action === 'adjust_wallet';
+  const isTransfer = currentPreview?.type === 'transfer' && !isWalletAdjustment;
+  const targetAdjustmentWallet = isWalletAdjustment ? findWallet(currentPreview?.walletName) : undefined;
+
   // Only an unnamed wallet falls back to one in the same currency (an unmatched name used to land in the
   // first VND wallet, so card spending never showed up as card debt)
   const entryWallet =
-    currentPreview && !isTransfer
+    currentPreview && !isTransfer && !isWalletAdjustment
       ? currentPreview.type === 'expense'
         ? chooseExpenseWallet(currentPreview)
         : findWallet(currentPreview.walletName) ||
@@ -305,8 +310,9 @@ HÃY CẬP NHẬT LẠI VÀ CHỈ BÁO KẾT QUẢ NGẮN GỌN TRONG 1 CÂU THE
 
   const canSave = Boolean(
     currentPreview &&
-      currentPreview.amount > 0 &&
-      (isTransfer ? transferReady : wallets.length > 0 && categories.length > 0)
+      (isWalletAdjustment
+        ? Boolean(targetAdjustmentWallet && (currentPreview.targetBalance !== undefined || currentPreview.amount >= 0))
+        : currentPreview.amount > 0 && (isTransfer ? transferReady : wallets.length > 0 && categories.length > 0))
   );
 
   const celebrateAndClose = () => {
@@ -323,9 +329,52 @@ HÃY CẬP NHẬT LẠI VÀ CHỈ BÁO KẾT QUẢ NGẮN GỌN TRONG 1 CÂU THE
     closeAssistant();
   };
 
-  // Confirm and Save transaction
+  // Confirm and Save transaction or wallet adjustment
   const handleConfirmSave = async () => {
     if (!currentPreview || !canSave) return;
+
+    if (isWalletAdjustment) {
+      if (!targetAdjustmentWallet) return;
+      const isCard = targetAdjustmentWallet.kind === 'credit';
+      const targetVal = currentPreview.targetBalance ?? currentPreview.amount;
+
+      let netTransactions = 0;
+      for (const tx of transactions) {
+        if (tx.walletId === targetAdjustmentWallet.id) {
+          const amount = Number(tx.walletAmount ?? tx.amount) || 0;
+          if (tx.type === 'income') netTransactions += amount;
+          else if (tx.type === 'expense') netTransactions -= amount;
+          else if (tx.type === 'transfer') netTransactions -= amount;
+        }
+        if (tx.type === 'transfer' && tx.toWalletId === targetAdjustmentWallet.id) {
+          netTransactions += Number(tx.toAmount ?? tx.amount) || 0;
+        }
+      }
+
+      let finalInitialBalance = 0;
+      if (isCard) {
+        finalInitialBalance = -Math.abs(targetVal) - netTransactions;
+      } else {
+        finalInitialBalance = targetVal - netTransactions;
+      }
+
+      if (
+        targetAdjustmentWallet.currency === 'VND' ||
+        targetAdjustmentWallet.currency === 'JPY' ||
+        targetAdjustmentWallet.currency === 'KRW'
+      ) {
+        finalInitialBalance = Math.round(finalInitialBalance);
+      } else {
+        finalInitialBalance = Math.round(finalInitialBalance * 100) / 100;
+      }
+
+      updateWallet(targetAdjustmentWallet.id, {
+        initialBalance: finalInitialBalance,
+      });
+
+      celebrateAndClose();
+      return;
+    }
 
     if (isTransfer) {
       const amounts = transferAmounts();
@@ -373,13 +422,17 @@ HÃY CẬP NHẬT LẠI VÀ CHỈ BÁO KẾT QUẢ NGẮN GỌN TRONG 1 CÂU THE
   const amounts = isTransfer ? transferAmounts() : null;
   const cannotSaveReason = !currentPreview
     ? ''
-    : !(currentPreview.amount > 0)
-      ? 'Chưa có số tiền hợp lệ. Gõ lại kèm số tiền.'
-      : wallets.length === 0
-        ? 'Chưa có nguồn tiền nào. Thêm ví ở Tổng quan trước rồi lưu giao dịch.'
-        : isTransfer && !transferReady
-          ? 'Chưa rõ chuyển từ đâu sang đâu. Gõ thêm, ví dụ “từ Techcombank sang Tiền mặt”.'
-          : '';
+    : isWalletAdjustment
+      ? !targetAdjustmentWallet
+        ? 'Chưa tìm thấy nguồn tiền phù hợp. Gõ lại tên ví chính xác.'
+        : ''
+      : !(currentPreview.amount > 0)
+        ? 'Chưa có số tiền hợp lệ. Gõ lại kèm số tiền.'
+        : wallets.length === 0
+          ? 'Chưa có nguồn tiền nào. Thêm ví ở Tổng quan trước rồi lưu giao dịch.'
+          : isTransfer && !transferReady
+            ? 'Chưa rõ chuyển từ đâu sang đâu. Gõ thêm, ví dụ “từ Techcombank sang Tiền mặt”.'
+            : '';
 
   const previewRow = (label: string, value: React.ReactNode, className = 'truncate font-semibold text-ink') => (
     <div className="min-w-0">
@@ -395,12 +448,51 @@ HÃY CẬP NHẬT LẠI VÀ CHỈ BÁO KẾT QUẢ NGẮN GỌN TRONG 1 CÂU THE
         className="w-[85%] max-w-sm rounded-card rounded-bl-[4px] bg-paper-3 px-3.5 py-3 text-sm text-ink"
       >
         <div className="flex items-baseline justify-between gap-3">
-          <h3 className="text-sm font-semibold text-ink">Kiểm tra trước khi lưu</h3>
+          <h3 className="text-sm font-semibold text-ink">
+            {isWalletAdjustment ? 'Kiểm tra trước khi cập nhật' : 'Kiểm tra trước khi lưu'}
+          </h3>
           <p className="text-xs text-muted">Sai? Gõ tiếp để sửa</p>
         </div>
 
         <dl className="mt-2.5 grid grid-cols-2 gap-x-4 gap-y-2">
-          {isTransfer ? (
+          {isWalletAdjustment ? (
+            <>
+              {previewRow(
+                targetAdjustmentWallet?.kind === 'credit' ? 'Dư nợ mới' : 'Số dư mới',
+                formatCurrency(
+                  currentPreview.targetBalance ?? currentPreview.amount,
+                  targetAdjustmentWallet?.currency ?? currentPreview.currency
+                ),
+                'figure text-lg font-bold text-accent'
+              )}
+              {previewRow('Thao tác', 'Sửa số dư nguồn tiền')}
+              {previewRow('Nguồn tiền', targetAdjustmentWallet?.name ?? (currentPreview.walletName || 'Chưa rõ'))}
+              {targetAdjustmentWallet && (
+                <div className="col-span-2 min-w-0 pt-1 text-xs text-muted border-t border-rule">
+                  <span>
+                    Số dư hiện tại:{' '}
+                    <strong className="text-ink">
+                      {targetAdjustmentWallet.kind === 'credit'
+                        ? formatCurrency(Math.max(0, -targetAdjustmentWallet.currentBalance), targetAdjustmentWallet.currency)
+                        : formatCurrency(targetAdjustmentWallet.currentBalance, targetAdjustmentWallet.currency)}
+                    </strong>
+                  </span>
+                  {(() => {
+                    const currentVal = targetAdjustmentWallet.kind === 'credit'
+                      ? Math.max(0, -targetAdjustmentWallet.currentBalance)
+                      : targetAdjustmentWallet.currentBalance;
+                    const newVal = currentPreview.targetBalance ?? currentPreview.amount;
+                    const diff = newVal - currentVal;
+                    return (
+                      <span className="ml-2 font-medium">
+                        ({diff >= 0 ? '+' : ''}{formatCurrency(diff, targetAdjustmentWallet.currency)})
+                      </span>
+                    );
+                  })()}
+                </div>
+              )}
+            </>
+          ) : isTransfer ? (
             <>
               {previewRow(
                 'Số tiền',
@@ -456,7 +548,7 @@ HÃY CẬP NHẬT LẠI VÀ CHỈ BÁO KẾT QUẢ NGẮN GỌN TRONG 1 CÂU THE
             className="flex h-10 flex-1 items-center justify-center gap-2 rounded-control bg-accent px-4 text-sm font-semibold text-accent-ink hover:bg-accent-hover disabled:opacity-55 transition-colors"
           >
             <Check className="w-4 h-4" aria-hidden="true" />
-            <span>{isTransfer ? 'Lưu chuyển tiền' : 'Lưu giao dịch'}</span>
+            <span>{isWalletAdjustment ? 'Cập nhật nguồn tiền' : isTransfer ? 'Lưu chuyển tiền' : 'Lưu giao dịch'}</span>
           </button>
         </div>
       </section>

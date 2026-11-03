@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   ArrowLeftRight,
   Banknote,
@@ -120,13 +120,19 @@ export const WalletsCard: React.FC = () => {
   const [transferDate, setTransferDate] = useState(toLocalISODate());
   const [transferNote, setTransferNote] = useState('');
 
-  // State for Edit Wallet Modal: name, opening balance, icon and colour
+  // State for Edit Wallet Modal: name, balance, icon, colour, limit
   const [editingWallet, setEditingWallet] = useState<Wallet | null>(null);
   const [editName, setEditName] = useState('');
+  const [editCurrentBalance, setEditCurrentBalance] = useState('');
   const [editInitialBalance, setEditInitialBalance] = useState('');
+  const [showInitialBalance, setShowInitialBalance] = useState(false);
   const [editIcon, setEditIcon] = useState('Wallet');
   const [editColor, setEditColor] = useState('#f97316');
   const [confirmingDelete, setConfirmingDelete] = useState(false);
+  const [editLimit, setEditLimit] = useState('');
+  const [payFrom, setPayFrom] = useState('');
+  const [payAmount, setPayAmount] = useState('');
+  const [payFee, setPayFee] = useState('');
 
   const transferSource = wallets.find((wallet) => wallet.id === transferFrom);
   const transferDestination = wallets.find((wallet) => wallet.id === transferTo);
@@ -215,12 +221,51 @@ export const WalletsCard: React.FC = () => {
     }
   };
 
+  const roundBalance = useCallback((val: number, curr?: string) => {
+    if (!curr || curr === 'VND' || curr === 'JPY' || curr === 'KRW') {
+      return Math.round(val);
+    }
+    return Math.round(val * 100) / 100;
+  }, []);
+
+  const netTransactions = useMemo(() => {
+    if (!editingWallet) return 0;
+    let sum = 0;
+    for (const tx of transactions) {
+      if (tx.walletId === editingWallet.id) {
+        const amount = Number(tx.walletAmount ?? tx.amount) || 0;
+        if (tx.type === 'income') sum += amount;
+        else if (tx.type === 'expense') sum -= amount;
+        else if (tx.type === 'transfer') sum -= amount;
+      }
+      if (tx.type === 'transfer' && tx.toWalletId === editingWallet.id) {
+        sum += Number(tx.toAmount ?? tx.amount) || 0;
+      }
+    }
+    return sum;
+  }, [editingWallet, transactions]);
+
+  const editingTxCount = useMemo(() => {
+    if (!editingWallet) return 0;
+    return transactions.filter(
+      (t) => t.walletId === editingWallet.id || (t.type === 'transfer' && t.toWalletId === editingWallet.id)
+    ).length;
+  }, [editingWallet, transactions]);
+
   const startEdit = (wallet: Wallet) => {
     const isCard = wallet.kind === 'credit';
     setEditingWallet(wallet);
     setEditName(wallet.name);
-    // Cards show their opening debt as a positive number
-    setEditInitialBalance(String(isCard ? Math.abs(wallet.initialBalance) : wallet.initialBalance));
+
+    // Current balance or debt:
+    const currentVal = isCard ? Math.max(0, -wallet.currentBalance) : wallet.currentBalance;
+    setEditCurrentBalance(String(roundBalance(currentVal, wallet.currency)));
+
+    // Opening balance or debt:
+    const initialVal = isCard ? Math.abs(wallet.initialBalance) : wallet.initialBalance;
+    setEditInitialBalance(String(roundBalance(initialVal, wallet.currency)));
+
+    setShowInitialBalance(false);
     setEditLimit(wallet.creditLimit ? String(wallet.creditLimit) : '');
     setEditIcon(wallet.icon);
     setEditColor(wallet.color);
@@ -230,16 +275,72 @@ export const WalletsCard: React.FC = () => {
     setPayFee('');
   };
 
+  const handleCurrentBalanceChange = (raw: string) => {
+    setEditCurrentBalance(raw);
+    if (!editingWallet) return;
+    const isCard = editingWallet.kind === 'credit';
+    if (raw === '' || raw === '-') return;
+
+    const val = parseFloat(raw);
+    if (!Number.isFinite(val)) return;
+
+    if (isCard) {
+      const targetInitial = -val - netTransactions;
+      const initialDebt = Math.max(0, -targetInitial);
+      setEditInitialBalance(String(roundBalance(initialDebt, editingWallet.currency)));
+    } else {
+      const targetInitial = val - netTransactions;
+      setEditInitialBalance(String(roundBalance(targetInitial, editingWallet.currency)));
+    }
+  };
+
+  const handleInitialBalanceChange = (raw: string) => {
+    setEditInitialBalance(raw);
+    if (!editingWallet) return;
+    const isCard = editingWallet.kind === 'credit';
+    if (raw === '' || raw === '-') return;
+
+    const val = parseFloat(raw);
+    if (!Number.isFinite(val)) return;
+
+    if (isCard) {
+      const targetCurrent = -val + netTransactions;
+      const currentDebt = Math.max(0, -targetCurrent);
+      setEditCurrentBalance(String(roundBalance(currentDebt, editingWallet.currency)));
+    } else {
+      const targetCurrent = val + netTransactions;
+      setEditCurrentBalance(String(roundBalance(targetCurrent, editingWallet.currency)));
+    }
+  };
+
   const handleUpdateWallet = (e: React.FormEvent) => {
     e.preventDefault();
     if (!editingWallet || !editName.trim()) return;
     const isCard = editingWallet.kind === 'credit';
-    const opening = parseFloat(editInitialBalance) || 0;
     const limit = parseFloat(editLimit);
+
+    let finalInitialBalance = 0;
+    if (editingTxCount === 0) {
+      const currentVal = parseFloat(editCurrentBalance);
+      const val = Number.isFinite(currentVal) ? currentVal : parseFloat(editInitialBalance) || 0;
+      finalInitialBalance = isCard ? -Math.abs(val) : val;
+    } else {
+      const currentVal = parseFloat(editCurrentBalance);
+      if (Number.isFinite(currentVal)) {
+        finalInitialBalance = isCard
+          ? -Math.abs(currentVal) - netTransactions
+          : currentVal - netTransactions;
+      } else {
+        const initialVal = parseFloat(editInitialBalance) || 0;
+        finalInitialBalance = isCard ? -Math.abs(initialVal) : initialVal;
+      }
+    }
+
+    finalInitialBalance = roundBalance(finalInitialBalance, editingWallet.currency);
 
     updateWallet(editingWallet.id, {
       name: editName.trim().slice(0, 60),
-      initialBalance: isCard ? -Math.abs(opening) : opening,
+      initialBalance: finalInitialBalance,
       creditLimit: isCard && limit > 0 ? limit : undefined,
       icon: editIcon,
       color: editColor,
@@ -249,10 +350,6 @@ export const WalletsCard: React.FC = () => {
   };
 
   // Paying off a card: a transfer from one of your other wallets
-  const [payFrom, setPayFrom] = useState('');
-  const [payAmount, setPayAmount] = useState('');
-  const [payFee, setPayFee] = useState('');
-  const [editLimit, setEditLimit] = useState('');
   const payableFrom = wallets.filter((w) => w.kind !== 'credit' && w.id !== editingWallet?.id);
   const handlePayCard = () => {
     const amount = parseFloat(payAmount);
@@ -261,8 +358,6 @@ export const WalletsCard: React.FC = () => {
     addTransfer(payFrom, editingWallet.id, amount, { fee: fee > 0 ? fee : undefined });
     setEditingWallet(null);
   };
-
-  const editingTxCount = editingWallet ? transactions.filter((t) => t.walletId === editingWallet.id).length : 0;
 
   const handleDelete = () => {
     if (!editingWallet) return;
@@ -591,58 +686,105 @@ export const WalletsCard: React.FC = () => {
         title="Sửa nguồn tiền"
       >
         <form onSubmit={handleUpdateWallet} className="space-y-4">
-          {/* Name and opening balance share a row; a card's limit gets the next one */}
-          <div className="grid grid-cols-2 gap-x-3 gap-y-4">
-          <div className="min-w-0">
-            <label htmlFor="wallet-edit-name" className="label">
-              Tên hiển thị
-            </label>
-            <input
-              id="wallet-edit-name"
-              name="walletName"
-              type="text"
-              required
-              maxLength={60}
-              autoComplete="off"
-              data-autofocus
-              value={editName}
-              onChange={(e) => setEditName(e.target.value)}
-              className="field"
-            />
-          </div>
+          <div className="space-y-3">
+            <div className="grid grid-cols-2 gap-x-3 gap-y-3">
+              <div className="min-w-0">
+                <label htmlFor="wallet-edit-name" className="label">
+                  Tên hiển thị
+                </label>
+                <input
+                  id="wallet-edit-name"
+                  name="walletName"
+                  type="text"
+                  required
+                  maxLength={60}
+                  autoComplete="off"
+                  data-autofocus
+                  value={editName}
+                  onChange={(e) => setEditName(e.target.value)}
+                  className="field"
+                />
+              </div>
 
-          <div className="min-w-0">
-            <label htmlFor="wallet-edit-initial" className="label truncate">
-              {editingWallet?.kind === 'credit' ? 'Dư nợ ban đầu' : 'Số dư đầu kỳ'} ({editingWallet?.currency})
-            </label>
-            <MoneyInput
-              id="wallet-edit-initial"
-              name="initialBalance"
-              required
-              value={editInitialBalance}
-              currency={editingWallet?.currency}
-              allowNegative={editingWallet?.kind !== 'credit'}
-              onValueChange={setEditInitialBalance}
-              className="field figure"
-            />
-          </div>
-
-          {editingWallet?.kind === 'credit' && (
-            <div className="col-span-2">
-              <label htmlFor="wallet-edit-limit" className="label">
-                Hạn mức thẻ ({editingWallet.currency})
-              </label>
-              <MoneyInput
-                id="wallet-edit-limit"
-                name="creditLimit"
-                placeholder="Không bắt buộc"
-                value={editLimit}
-                currency={editingWallet?.currency}
-                onValueChange={setEditLimit}
-                className="field figure"
-              />
+              <div className="min-w-0">
+                <label htmlFor="wallet-edit-balance" className="label truncate">
+                  {editingWallet?.kind === 'credit'
+                    ? 'Dư nợ hiện tại'
+                    : editingTxCount > 0
+                      ? 'Số dư hiện tại'
+                      : 'Số dư'} ({editingWallet?.currency})
+                </label>
+                <MoneyInput
+                  id="wallet-edit-balance"
+                  name="currentBalance"
+                  required
+                  value={editCurrentBalance}
+                  currency={editingWallet?.currency}
+                  allowNegative={editingWallet?.kind !== 'credit'}
+                  onValueChange={handleCurrentBalanceChange}
+                  className="field figure font-semibold"
+                />
+              </div>
             </div>
-          )}
+
+            {editingTxCount > 0 && (
+              <div className="rounded-control bg-paper-2 p-2.5 text-xs text-muted space-y-2 border border-rule">
+                <div className="flex items-center justify-between">
+                  <span>
+                    Đã có <strong className="text-ink">{editingTxCount}</strong> giao dịch (
+                    <span className={netTransactions >= 0 ? 'text-income font-medium' : 'text-expense font-medium'}>
+                      {netTransactions >= 0 ? '+' : ''}{formatCurrency(netTransactions, editingWallet?.currency ?? 'VND')}
+                    </span>
+                    )
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => setShowInitialBalance((v) => !v)}
+                    className="text-accent hover:underline font-medium text-xs ml-2 cursor-pointer"
+                  >
+                    {showInitialBalance ? 'Ẩn số dư ban đầu' : 'Sửa số dư ban đầu'}
+                  </button>
+                </div>
+                {showInitialBalance && (
+                  <div className="pt-2 border-t border-rule space-y-1">
+                    <label htmlFor="wallet-edit-initial" className="label text-xs">
+                      {editingWallet?.kind === 'credit'
+                        ? 'Dư nợ ban đầu (lúc tạo thẻ)'
+                        : 'Số dư ban đầu (lúc tạo ví)'} ({editingWallet?.currency})
+                    </label>
+                    <MoneyInput
+                      id="wallet-edit-initial"
+                      name="initialBalance"
+                      value={editInitialBalance}
+                      currency={editingWallet?.currency}
+                      allowNegative={editingWallet?.kind !== 'credit'}
+                      onValueChange={handleInitialBalanceChange}
+                      className="field figure text-sm"
+                    />
+                    <p className="text-[11px] text-muted">
+                      Số dư hiện tại và số dư ban đầu được tự động đồng bộ theo các giao dịch đã ghi nhận.
+                    </p>
+                  </div>
+                )}
+              </div>
+            )}
+
+            {editingWallet?.kind === 'credit' && (
+              <div>
+                <label htmlFor="wallet-edit-limit" className="label">
+                  Hạn mức thẻ ({editingWallet.currency})
+                </label>
+                <MoneyInput
+                  id="wallet-edit-limit"
+                  name="creditLimit"
+                  placeholder="Không bắt buộc"
+                  value={editLimit}
+                  currency={editingWallet?.currency}
+                  onValueChange={setEditLimit}
+                  className="field figure"
+                />
+              </div>
+            )}
           </div>
 
           <IconPicker value={editIcon} onChange={setEditIcon} />
