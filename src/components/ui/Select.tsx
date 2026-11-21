@@ -226,7 +226,7 @@ export const Select: React.FC<SelectProps> = ({
               role="listbox"
               tabIndex={-1}
               aria-activedescendant={filtered[active] ? `${listId}-${active}` : undefined}
-              className="overflow-y-auto p-1 outline-none"
+              className="no-scrollbar overflow-y-auto p-1 outline-none"
             >
               {filtered.length === 0 && <li className="px-3 py-2 text-sm text-muted">Không tìm thấy</li>}
               {filtered.map((opt, i) => {

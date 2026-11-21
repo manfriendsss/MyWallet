@@ -78,7 +78,15 @@ export const BottomNav: React.FC = () => {
       <div ref={barRef} className="relative pb-safe">
         {/* Fill only the device safe area. Keeping the upper wrapper transparent
             lets the SVG's rounded top corners remain visibly rounded. */}
-        <div aria-hidden="true" className="absolute inset-x-0 bottom-0 h-[max(var(--space-xs),env(safe-area-inset-bottom))] bg-surface" />
+        <div aria-hidden="true" className="glass-panel absolute inset-x-0 bottom-0 h-[max(var(--space-xs),env(safe-area-inset-bottom))]" />
+        {/* Frosted backdrop cut to the bar's outline; the SVG above adds the tint, hairline and shadow */}
+        {size.w > 0 && (
+          <div
+            aria-hidden="true"
+            className="glass-backdrop absolute inset-0"
+            style={{ clipPath: `path('${barPath(size.w, size.h + 1)}')` }}
+          />
+        )}
         {size.w > 0 && (
           <svg
             aria-hidden="true"
@@ -103,10 +111,10 @@ export const BottomNav: React.FC = () => {
         type="button"
         onClick={openAssistant}
         style={{ top: CENTER_Y - BUTTON_R }}
-        className="absolute left-1/2 grid h-14 w-14 -translate-x-1/2 place-items-center rounded-full bg-[image:var(--gradient-accent)] text-accent-ink shadow-[0_6px_12px_-4px_oklch(30%_0.08_45/0.35)] transition-transform active:scale-95"
+        className="fab-glass absolute left-1/2 grid h-14 w-14 -translate-x-1/2 place-items-center rounded-full text-white transition-transform active:scale-95"
         aria-label="Thêm giao dịch"
       >
-        <Plus className="w-7 h-7" strokeWidth={2.5} aria-hidden="true" />
+        <Plus className="w-7 h-7 drop-shadow-[0_1px_1px_oklch(35%_0.12_40/0.45)]" strokeWidth={3.25} aria-hidden="true" />
       </button>
     </nav>
   );

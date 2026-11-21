@@ -14,7 +14,7 @@ export const Header: React.FC = () => {
   const title = isSubPage ? 'Tất cả giao dịch' : (current?.title ?? 'MyWallet');
 
   return (
-    <header className="sticky top-0 z-[300] w-full border-b border-rule bg-surface pt-[env(safe-area-inset-top)]">
+    <header className="app-header glass-panel sticky top-0 z-[300] w-full pt-[env(safe-area-inset-top)]">
       <div className="max-w-[1200px] mx-auto h-14 px-4 sm:px-6 lg:px-8 flex items-center justify-between gap-4">
         <div className="flex items-center gap-2.5 min-w-0">
           {isSubPage ? (

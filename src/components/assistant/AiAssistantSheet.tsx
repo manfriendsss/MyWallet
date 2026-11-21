@@ -600,7 +600,7 @@ HÃY CẬP NHẬT LẠI VÀ CHỈ BÁO KẾT QUẢ NGẮN GỌN TRONG 1 CÂU THE
             </div>
 
             {/* Conversation */}
-            <div className="flex-1 space-y-3 overflow-y-auto px-4 py-4" aria-live="polite" aria-relevant="additions">
+            <div className="no-scrollbar flex-1 space-y-3 overflow-y-auto px-4 py-4" aria-live="polite" aria-relevant="additions">
               {messages.map((msg, index) => {
                 const isUser = msg.sender === 'user';
                 return (

@@ -167,7 +167,7 @@ export const CategoriesCard: React.FC = () => {
           <fieldset>
             <legend className="label">Biểu tượng</legend>
             {/* Grouped by topic, scrolls inside the form */}
-            <div role="radiogroup" aria-label="Biểu tượng" className="max-h-64 space-y-3 overflow-y-auto pr-1">
+            <div role="radiogroup" aria-label="Biểu tượng" className="no-scrollbar max-h-64 space-y-3 overflow-y-auto">
               {CATEGORY_ICON_GROUPS.map((group) => (
                 <div key={group.label}>
                   <p className="mb-1.5 text-xs font-semibold text-muted">{group.label}</p>
