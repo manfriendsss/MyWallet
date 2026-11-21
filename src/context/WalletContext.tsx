@@ -14,6 +14,8 @@ import {
   convertToVnd,
   convertCurrency,
   convertForWallet,
+  isPaypalWallet,
+  PAYPAL_RATE_FACTOR,
   fetchLiveExchangeRates,
   isRatesStale,
   DEFAULT_EXCHANGE_RATES,
@@ -407,10 +409,13 @@ export const WalletProvider: React.FC<{ children: React.ReactNode; syncEnabled?:
   };
 
   /** Amount that affects the wallet's own balance, which can differ for foreign-currency card purchases. */
-  const toWalletAmount = (amount: number, currency: string, walletId: string) => {
+  const toWalletAmount = (amount: number, currency: string, walletId: string, type?: Transaction['type']) => {
     const wallet = wallets.find((candidate) => candidate.id === walletId);
     if (!wallet || wallet.currency === currency) return amount;
-    return convertCurrency(amount, currency, wallet.currency, exchangeRates);
+    if (!isPaypalWallet(wallet)) return convertCurrency(amount, currency, wallet.currency, exchangeRates);
+    // PayPal keeps its spread: paying in another currency costs more, receiving one credits less
+    const adjusted = type === 'income' ? amount * PAYPAL_RATE_FACTOR : amount / PAYPAL_RATE_FACTOR;
+    return convertCurrency(adjusted, currency, wallet.currency, exchangeRates);
   };
 
   // Transactions Actions
@@ -420,7 +425,7 @@ export const WalletProvider: React.FC<{ children: React.ReactNode; syncEnabled?:
     const { amountVnd, rateUsed } = toVndFor(txData.amount, txData.currency, txData.walletId);
     const walletAmount = txData.type === 'transfer'
       ? undefined
-      : toWalletAmount(txData.amount, txData.currency, txData.walletId);
+      : toWalletAmount(txData.amount, txData.currency, txData.walletId, txData.type);
     const newTx: Transaction = {
       ...txData,
       walletAmount,
@@ -454,12 +459,13 @@ export const WalletProvider: React.FC<{ children: React.ReactNode; syncEnabled?:
     const nextType = updates.type ?? target.type;
     if (
       nextType !== 'transfer' &&
-      (updates.amount !== undefined || updates.currency !== undefined || updates.walletId !== undefined)
+      (updates.amount !== undefined || updates.currency !== undefined || updates.walletId !== undefined || updates.type !== undefined)
     ) {
       walletAmount = toWalletAmount(
         updates.amount ?? target.amount,
         updates.currency ?? target.currency,
-        updates.walletId ?? target.walletId
+        updates.walletId ?? target.walletId,
+        nextType
       );
     }
 

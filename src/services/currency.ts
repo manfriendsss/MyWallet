@@ -134,6 +134,11 @@ export function isPaypalWallet(wallet: Pick<Wallet, 'icon' | 'name'>): boolean {
   return wallet.icon === 'PayPal' || /paypal/i.test(wallet.name);
 }
 
+/** Sources that can pay in any currency and convert into their own balance: credit cards and PayPal */
+export function isMultiCurrencyWallet(wallet: Pick<Wallet, 'icon' | 'name' | 'kind'>): boolean {
+  return wallet.kind === 'credit' || isPaypalWallet(wallet);
+}
+
 /** The rate a given wallet actually gets: the market rate, or 97% of it for a PayPal balance */
 export function convertForWallet(
   amount: number,

@@ -16,6 +16,7 @@ import { TransactionFormModal } from '../transactions/TransactionForm';
 import { cn } from '../../utils/cn';
 import { Tooltip } from '../ui/Tooltip';
 import { walletByName, walletMentionedIn } from '../../utils/walletMatch';
+import { isMultiCurrencyWallet } from '../../services/currency';
 
 interface ChatMessage {
   id: string;
@@ -266,7 +267,7 @@ HÃY CẬP NHẬT LẠI VÀ CHỈ BÁO KẾT QUẢ NGẮN GỌN TRONG 1 CÂU THE
    */
   const chooseExpenseWallet = (preview: ParsedTransactionFromAi) => {
     const named = findWallet(preview.walletName) || walletMentionedIn(preview.rawText ?? '', wallets);
-    if (named?.kind === 'credit' || (named && named.currency === preview.currency && named.currentBalance >= preview.amount)) {
+    if ((named && isMultiCurrencyWallet(named)) || (named && named.currency === preview.currency && named.currentBalance >= preview.amount)) {
       return named;
     }
 

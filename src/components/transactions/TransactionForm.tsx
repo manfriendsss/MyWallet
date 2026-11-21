@@ -3,7 +3,7 @@ import type { Transaction, TransactionType } from '../../types';
 import { useWallet } from '../../context/WalletContext';
 import { toLocalISODate } from '../../utils/date';
 import { receiptApi } from '../../services/api';
-import { currencyName, getCurrencyOptions } from '../../services/currency';
+import { currencyName, getCurrencyOptions, isMultiCurrencyWallet } from '../../services/currency';
 import { formatCurrency } from '../../utils/formatters';
 import { Button } from '../ui/Button';
 import { MoneyInput } from '../ui/MoneyInput';
@@ -74,10 +74,11 @@ export const TransactionFormModal: React.FC<TransactionFormModalProps> = ({
   );
   const allCurrencyOptions = useMemo(() => getCurrencyOptions(exchangeRates), [exchangeRates]);
   const walletCurrencies = useMemo(() => new Set(wallets.map((wallet) => wallet.currency)), [wallets]);
-  const currencyOptions = selectedWallet?.kind === 'credit'
+  const isMultiCurrency = selectedWallet ? isMultiCurrencyWallet(selectedWallet) : false;
+  const currencyOptions = isMultiCurrency
     ? allCurrencyOptions
     : allCurrencyOptions.filter((option) => walletCurrencies.has(option.value));
-  const isForeignCardPurchase = selectedWallet?.kind === 'credit' && currency !== selectedWallet.currency;
+  const isForeignCardPurchase = isMultiCurrency && !!selectedWallet && currency !== selectedWallet.currency;
 
   if (transaction?.type === 'transfer') {
     const fromWallet = wallets.find((wallet) => wallet.id === transaction.walletId);
@@ -284,7 +285,7 @@ export const TransactionFormModal: React.FC<TransactionFormModalProps> = ({
               value={currency}
               options={currencyOptions}
               onChange={(value) => {
-                if (selectedWallet?.kind === 'credit') {
+                if (isMultiCurrency) {
                   setCurrency(value);
                 } else {
                   const matchingWallet = wallets.find((wallet) => wallet.currency === value);
@@ -308,7 +309,7 @@ export const TransactionFormModal: React.FC<TransactionFormModalProps> = ({
               onChange={(value) => {
                 setWalletId(value);
                 const nextWallet = wallets.find((wallet) => wallet.id === value);
-                if (nextWallet?.kind !== 'credit') setCurrency(nextWallet?.currency ?? 'VND');
+                if (!nextWallet || !isMultiCurrencyWallet(nextWallet)) setCurrency(nextWallet?.currency ?? 'VND');
                 setError('');
               }}
               searchable
@@ -317,7 +318,9 @@ export const TransactionFormModal: React.FC<TransactionFormModalProps> = ({
         </div>
         {isForeignCardPurchase && (
           <p className="hint -mt-2">
-            Khoản {currencyName(currency)} này sẽ được quy đổi vào dư nợ {selectedWallet.currency} của thẻ.
+            {selectedWallet.kind === 'credit'
+              ? `Khoản ${currencyName(currency)} này sẽ được quy đổi vào dư nợ ${selectedWallet.currency} của thẻ.`
+              : `Khoản ${currencyName(currency)} này sẽ được quy đổi theo tỷ giá PayPal vào số dư ${selectedWallet.currency}.`}
           </p>
         )}
 
