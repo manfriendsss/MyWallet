@@ -13,6 +13,8 @@ interface ModalProps {
   children: React.ReactNode;
   isBottomSheetOnMobile?: boolean;
   maxWidth?: string;
+  /** 'drawer': a bottom sheet on phones, a full-height panel sliding in from the right on wider screens */
+  variant?: 'dialog' | 'drawer';
 }
 
 export const Modal: React.FC<ModalProps> = ({
@@ -23,6 +25,7 @@ export const Modal: React.FC<ModalProps> = ({
   children,
   isBottomSheetOnMobile = true,
   maxWidth = 'max-w-lg',
+  variant = 'dialog',
 }) => {
   const panelRef = useDialog(isOpen, onClose);
   const dismiss = () => {
@@ -33,6 +36,15 @@ export const Modal: React.FC<ModalProps> = ({
   const titleId = useId();
   const descId = useId();
   const [mobileViewport, setMobileViewport] = useState<{ height: number; offsetTop: number } | null>(null);
+  const [isWide, setIsWide] = useState(() => window.matchMedia('(min-width: 640px)').matches);
+  const isSideDrawer = variant === 'drawer' && isWide;
+
+  useEffect(() => {
+    const query = window.matchMedia('(min-width: 640px)');
+    const update = () => setIsWide(query.matches);
+    query.addEventListener('change', update);
+    return () => query.removeEventListener('change', update);
+  }, []);
 
   // `dvh` is not updated consistently by every mobile browser while its
   // keyboard is open. Anchor the sheet to the visual viewport instead, so the
@@ -69,7 +81,10 @@ export const Modal: React.FC<ModalProps> = ({
     <AnimatePresence>
       {isOpen && (
         <div
-          className="fixed inset-0 z-[400] flex items-end justify-center overscroll-none sm:items-center sm:p-4"
+          className={cn(
+            'fixed inset-0 z-[400] flex items-end justify-center overscroll-none',
+            isSideDrawer ? 'sm:items-stretch sm:justify-end' : 'sm:items-center sm:p-4'
+          )}
           style={viewportOverlayStyle}
         >
           {/* Backdrop */}
@@ -91,14 +106,24 @@ export const Modal: React.FC<ModalProps> = ({
             aria-labelledby={title ? titleId : undefined}
             aria-describedby={description ? descId : undefined}
             tabIndex={-1}
-            initial={isBottomSheetOnMobile ? { y: '100%', opacity: 0.6 } : { scale: 0.98, opacity: 0 }}
-            animate={{ y: 0, scale: 1, opacity: 1 }}
-            exit={isBottomSheetOnMobile ? { y: '100%', opacity: 0 } : { scale: 0.98, opacity: 0 }}
-            transition={{ duration: 0.28, ease: [0.16, 1, 0.3, 1] }}
+            initial={
+              isSideDrawer
+                ? { x: '100%', opacity: 0.6 }
+                : isBottomSheetOnMobile ? { y: '100%', opacity: 0.6 } : { scale: 0.98, opacity: 0 }
+            }
+            animate={{ x: 0, y: 0, scale: 1, opacity: 1 }}
+            exit={
+              isSideDrawer
+                ? { x: '100%', opacity: 0 }
+                : isBottomSheetOnMobile ? { y: '100%', opacity: 0 } : { scale: 0.98, opacity: 0 }
+            }
+            transition={{ duration: isSideDrawer ? 0.32 : 0.28, ease: [0.16, 1, 0.3, 1] }}
             style={panelStyle}
             className={cn(
-              'relative w-full bg-surface shadow-[var(--shadow-overlay)] flex flex-col max-h-[92dvh] sm:max-h-[85dvh] outline-none',
-              isBottomSheetOnMobile ? 'rounded-t-card sm:rounded-card' : 'rounded-card',
+              'relative w-full bg-surface shadow-[var(--shadow-overlay)] flex flex-col outline-none',
+              isSideDrawer
+                ? 'h-full max-h-none rounded-l-card'
+                : cn('max-h-[92dvh] sm:max-h-[85dvh]', isBottomSheetOnMobile ? 'rounded-t-card sm:rounded-card' : 'rounded-card'),
               maxWidth
             )}
           >

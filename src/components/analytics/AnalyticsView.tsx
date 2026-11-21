@@ -1,4 +1,5 @@
 import React, { useState, useMemo } from 'react';
+import { ChevronRight } from 'lucide-react';
 import {
   format,
   startOfWeek,
@@ -15,10 +16,15 @@ import { useWallet } from '../../context/WalletContext';
 import { Card, CardHeader } from '../ui/Card';
 import { IconRenderer } from '../ui/IconRenderer';
 import { ColorTile } from '../ui/Swatches';
-import { formatCurrency, formatSigned } from '../../utils/formatters';
+import { formatCurrency, formatShortDate, formatSigned } from '../../utils/formatters';
 import { CARD_ART } from '../../assets/cards';
 import { ToneTabs, type ToneTab } from '../ui/ToneTabs';
 import { Stagger, StaggerItem } from '../ui/Stagger';
+import { Modal } from '../ui/Modal';
+import { TransactionRow } from '../dashboard/TransactionRow';
+import { TransactionDetailSheet } from '../transactions/TransactionDetailSheet';
+import { TransactionFormModal } from '../transactions/TransactionForm';
+import type { Category, Transaction } from '../../types';
 
 type TimeRange = 'day' | 'week' | 'month' | 'year';
 
@@ -34,6 +40,100 @@ const RANGE_TABS: Array<ToneTab<TimeRange>> = (Object.keys(RANGE_LABELS) as Time
   label: RANGE_LABELS[id],
   tone: 'accent',
 }));
+
+interface BreakdownItem {
+  id: string;
+  name: string;
+  icon: string;
+  color?: string;
+  amount: number;
+  share: number;
+  percentage: number;
+}
+
+interface BreakdownCardProps {
+  id: string;
+  title: string;
+  art: string;
+  emptyText: string;
+  shareLabel: string;
+  items: BreakdownItem[];
+  onSelect: (item: BreakdownItem) => void;
+}
+
+/** Totals per category for one direction (expense by category, income by source), largest first */
+function buildBreakdown(
+  list: Transaction[],
+  categories: Category[],
+  type: 'income' | 'expense',
+  total: number,
+  fallbackName: string
+): BreakdownItem[] {
+  const amounts: Record<string, number> = {};
+  for (const tx of list) {
+    if (tx.type === type) amounts[tx.categoryId] = (amounts[tx.categoryId] || 0) + tx.amountVnd;
+  }
+
+  return Object.entries(amounts)
+    .map(([catId, amount]) => {
+      const cat = categories.find((c) => c.id === catId);
+      const share = total > 0 ? amount / total : 0;
+      return {
+        id: catId,
+        name: cat?.name || fallbackName,
+        icon: cat?.icon || 'CircleDot',
+        color: cat?.color,
+        amount,
+        share,
+        percentage: Math.round(share * 100),
+      };
+    })
+    .sort((a, b) => b.amount - a.amount);
+}
+
+/** A ranked list of categories with share bars; each row opens its transactions */
+const BreakdownCard: React.FC<BreakdownCardProps> = ({ id, title, art, emptyText, shareLabel, items, onSelect }) => (
+  <Card aria-labelledby={id}>
+    <CardHeader id={id} title={title} art={art} />
+
+    {items.length === 0 ? (
+      <p className="border-t border-rule py-12 text-center text-sm text-muted">{emptyText}</p>
+    ) : (
+      <ul className="divide-y divide-rule border-t border-rule">
+        {items.map((item) => (
+          <li key={item.id}>
+            <button
+              type="button"
+              onClick={() => onSelect(item)}
+              aria-label={`${item.name}: ${formatCurrency(item.amount, 'VND')}, ${item.percentage}% ${shareLabel}. Xem giao dịch`}
+              className="-mx-2 block w-[calc(100%+1rem)] rounded-control px-2 py-3 text-left transition-colors hover:bg-paper-2 active:bg-paper-3"
+            >
+              <div className="flex items-center gap-3">
+                <ColorTile color={item.color} size="sm">
+                  <IconRenderer name={item.icon} className="w-3.5 h-3.5" />
+                </ColorTile>
+                <span className="min-w-0 flex-1 truncate text-sm font-semibold text-ink">{item.name}</span>
+                <span className="figure w-10 text-right text-sm text-muted">{item.percentage}%</span>
+                <span className="figure min-w-[6.5rem] text-right text-sm font-bold text-ink">
+                  {formatCurrency(item.amount, 'VND')}
+                </span>
+                <ChevronRight className="h-4 w-4 shrink-0 text-muted" aria-hidden="true" />
+              </div>
+
+              {/* Share bar: scaled, never width-animated */}
+              <div className="mt-2 ml-10 mr-7 h-1.5 overflow-hidden rounded-full bg-paper-3" aria-hidden="true">
+                <div
+                  className="h-full w-full origin-left rounded-full transition-transform duration-300"
+                  style={{ transform: `scaleX(${item.share})`, backgroundColor: item.color || 'var(--color-muted)' }}
+                />
+              </div>
+            </button>
+          </li>
+        ))}
+      </ul>
+    )}
+  </Card>
+);
 
 interface MonthlyTrend {
   key: string;
@@ -52,8 +152,12 @@ const CHART_BAR_WIDTH = 20;
 const CHART_BAR_GAP = 6;
 
 export const AnalyticsView: React.FC = () => {
-  const { transactions, categories } = useWallet();
+  const { transactions, categories, wallets } = useWallet();
   const [range, setRange] = useState<TimeRange>('month');
+  const [drawer, setDrawer] = useState<{ type: 'income' | 'expense'; item: BreakdownItem } | null>(null);
+  const [selectedTransactionId, setSelectedTransactionId] = useState<string | null>(null);
+  const [editing, setEditing] = useState<Transaction | null>(null);
+  const selectedTransaction = transactions.find((tx) => tx.id === selectedTransactionId);
   const [selectedTrendMonth, setSelectedTrendMonth] = useState(() => format(new Date(), 'yyyy-MM'));
 
   const filteredTransactions = useMemo(() => {
@@ -131,31 +235,44 @@ export const AnalyticsView: React.FC = () => {
         ? 'text-income'
         : 'text-ink-2';
 
-  // Breakdown by Category for Expenses
-  const categoryBreakdown = useMemo(() => {
-    const catMap: Record<string, number> = {};
-    for (const tx of filteredTransactions) {
-      if (tx.type === 'expense') {
-        catMap[tx.categoryId] = (catMap[tx.categoryId] || 0) + tx.amountVnd;
+  // Share of spending per category, and of income per source (income category)
+  const categoryBreakdown = useMemo(
+    () => buildBreakdown(filteredTransactions, categories, 'expense', totalExpense, 'Chi khác'),
+    [filteredTransactions, categories, totalExpense]
+  );
+  const incomeBreakdown = useMemo(
+    () => buildBreakdown(filteredTransactions, categories, 'income', totalIncome, 'Thu khác'),
+    [filteredTransactions, categories, totalIncome]
+  );
+
+  // The drawer's entries: this period, this category, newest first, grouped by day
+  const drawerGroups = useMemo(() => {
+    if (!drawer) return [];
+    const groups: Array<{ date: string; transactions: Transaction[]; total: number }> = [];
+    const list = filteredTransactions
+      .filter((tx) => tx.type === drawer.type && tx.categoryId === drawer.item.id)
+      .toSorted(
+        (a, b) =>
+          b.date.localeCompare(a.date) ||
+          (b.time ?? '').localeCompare(a.time ?? '') ||
+          b.createdAt.localeCompare(a.createdAt)
+      );
+    for (const tx of list) {
+      const date = tx.date.slice(0, 10);
+      const last = groups[groups.length - 1];
+      if (last?.date === date) {
+        last.transactions.push(tx);
+        last.total += tx.amountVnd;
+      } else {
+        groups.push({ date, transactions: [tx], total: tx.amountVnd });
       }
     }
-
-    const items = Object.entries(catMap).map(([catId, amount]) => {
-      const cat = categories.find((c) => c.id === catId);
-      const share = totalExpense > 0 ? amount / totalExpense : 0;
-      return {
-        id: catId,
-        name: cat?.name || 'Chi khác',
-        icon: cat?.icon || 'CircleDot',
-        color: cat?.color,
-        amount,
-        share,
-        percentage: Math.round(share * 100),
-      };
-    });
-
-    return items.sort((a, b) => b.amount - a.amount);
-  }, [filteredTransactions, categories, totalExpense]);
+    return groups;
+  }, [drawer, filteredTransactions]);
+  const drawerCount = drawerGroups.reduce((sum, group) => sum + group.transactions.length, 0);
+  const drawerTotal = drawerGroups.reduce((sum, group) => sum + group.total, 0);
+  const drawerSign = drawer?.type === 'income' ? '+' : '−';
+  const drawerTone = drawer?.type === 'income' ? 'text-income' : 'text-expense';
 
   const stats = [
     { label: 'Tổng thu', value: formatSigned(totalIncome, 'VND', '+'), tone: 'text-income' },
@@ -313,45 +430,87 @@ export const AnalyticsView: React.FC = () => {
 
       {/* Category breakdown */}
       <StaggerItem>
-        <Card aria-labelledby="breakdown-heading">
-          <CardHeader id="breakdown-heading" title="Chi tiêu theo danh mục" art={CARD_ART.chart} />
-
-          {categoryBreakdown.length === 0 ? (
-            <p className="border-t border-rule py-12 text-center text-sm text-muted">
-              Chưa có khoản chi nào trong khoảng thời gian này.
-            </p>
-          ) : (
-            <ul className="divide-y divide-rule border-t border-rule">
-              {categoryBreakdown.map((item) => (
-                <li key={item.id} className="py-3">
-                  <div className="flex items-center gap-3">
-                    <ColorTile color={item.color} size="sm">
-                      <IconRenderer name={item.icon} className="w-3.5 h-3.5" />
-                    </ColorTile>
-                    <span className="min-w-0 flex-1 truncate text-sm font-semibold text-ink">{item.name}</span>
-                    <span className="figure w-10 text-right text-sm text-muted">{item.percentage}%</span>
-                    <span className="figure min-w-[6.5rem] text-right text-sm font-bold text-ink">
-                      {formatCurrency(item.amount, 'VND')}
-                    </span>
-                  </div>
-
-                  {/* Share bar: scaled, never width-animated */}
-                  <div
-                    className="mt-2 ml-10 h-1.5 overflow-hidden rounded-full bg-paper-3"
-                    role="img"
-                    aria-label={`${item.name}: ${item.percentage}% tổng chi`}
-                  >
-                    <div
-                      className="h-full w-full origin-left rounded-full transition-transform duration-300"
-                      style={{ transform: `scaleX(${item.share})`, backgroundColor: item.color || 'var(--color-muted)' }}
-                    />
-                  </div>
-                </li>
-              ))}
-            </ul>
-          )}
-        </Card>
+        <BreakdownCard
+          id="breakdown-heading"
+          title="Chi tiêu theo danh mục"
+          art={CARD_ART.chart}
+          emptyText="Chưa có khoản chi nào trong khoảng thời gian này."
+          shareLabel="tổng chi"
+          items={categoryBreakdown}
+          onSelect={(item) => setDrawer({ type: 'expense', item })}
+        />
       </StaggerItem>
+
+      {/* Income by source */}
+      <StaggerItem>
+        <BreakdownCard
+          id="income-breakdown-heading"
+          title="Thu nhập theo nguồn"
+          art={CARD_ART.income}
+          emptyText="Chưa có khoản thu nào trong khoảng thời gian này."
+          shareLabel="tổng thu"
+          items={incomeBreakdown}
+          onSelect={(item) => setDrawer({ type: 'income', item })}
+        />
+      </StaggerItem>
+
+      {/* Drawer: the transactions behind one category or income source */}
+      <Modal
+        variant="drawer"
+        maxWidth="sm:max-w-md"
+        isOpen={Boolean(drawer)}
+        onClose={() => setDrawer(null)}
+        title={drawer?.item.name}
+        description={drawer ? `${RANGE_LABELS[range]} · ${drawerCount} giao dịch` : undefined}
+      >
+        {drawerGroups.length === 0 ? (
+          <p className="py-10 text-center text-sm text-muted">Không còn giao dịch nào trong mục này.</p>
+        ) : (
+          <div className="-mx-5 -mt-5 sm:-mx-6">
+            <div className="flex items-baseline justify-between gap-3 px-5 py-4 sm:px-6">
+              <span className="text-sm text-muted">Tổng cộng</span>
+              <span className={`figure text-xl font-bold ${drawerTone}`}>{formatSigned(drawerTotal, 'VND', drawerSign)}</span>
+            </div>
+            {drawerGroups.map((group) => (
+              <section key={group.date}>
+                <div className="sticky top-0 z-10 flex items-center justify-between gap-3 border-y border-rule bg-surface/95 px-5 py-2 backdrop-blur sm:px-6">
+                  <h3 className="text-sm font-semibold text-ink">{formatShortDate(group.date)}</h3>
+                  <span className={`figure text-sm ${drawerTone}`}>{formatSigned(group.total, 'VND', drawerSign)}</span>
+                </div>
+                <ul className="divide-y divide-rule px-5 sm:px-6">
+                  {group.transactions.map((tx, index) => (
+                    <TransactionRow
+                      key={tx.id}
+                      tx={tx}
+                      index={index}
+                      category={categories.find((c) => c.id === tx.categoryId)}
+                      wallet={wallets.find((w) => w.id === tx.walletId)}
+                      showDate={false}
+                      onOpen={(transaction) => setSelectedTransactionId(transaction.id)}
+                    />
+                  ))}
+                </ul>
+              </section>
+            ))}
+          </div>
+        )}
+      </Modal>
+      <TransactionDetailSheet
+        isOpen={Boolean(selectedTransaction)}
+        onClose={() => setSelectedTransactionId(null)}
+        onEdit={() => {
+          if (!selectedTransaction) return;
+          setSelectedTransactionId(null);
+          window.requestAnimationFrame(() => {
+            window.requestAnimationFrame(() => setEditing(selectedTransaction));
+          });
+        }}
+        transaction={selectedTransaction}
+        category={selectedTransaction ? categories.find((c) => c.id === selectedTransaction.categoryId) : undefined}
+        wallet={selectedTransaction ? wallets.find((w) => w.id === selectedTransaction.walletId) : undefined}
+        toWallet={selectedTransaction?.toWalletId ? wallets.find((w) => w.id === selectedTransaction.toWalletId) : undefined}
+      />
+      <TransactionFormModal isOpen={Boolean(editing)} onClose={() => setEditing(null)} transaction={editing ?? undefined} />
     </Stagger>
   );
 };

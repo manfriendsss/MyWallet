@@ -13,41 +13,56 @@ import {
   isToday,
 } from 'date-fns';
 import { motion, AnimatePresence } from 'framer-motion';
-import { ChevronLeft, ChevronRight, Plus } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Plus, X } from 'lucide-react';
 import { useWallet } from '../../context/WalletContext';
 import { Card } from '../ui/Card';
-import { Modal } from '../ui/Modal';
 import { Button } from '../ui/Button';
+import { ToneTabs, type ToneTab } from '../ui/ToneTabs';
+import { useToast } from '../ui/Toast';
 import { TransactionRow } from '../dashboard/TransactionRow';
-import { formatCurrency, formatDate, formatSigned } from '../../utils/formatters';
+import { formatDate, formatShortDate, formatSigned } from '../../utils/formatters';
 import { cn } from '../../utils/cn';
 import { CARD_ART } from '../../assets/cards';
 import { Stagger, StaggerItem } from '../ui/Stagger';
-import type { Transaction } from '../../types';
+import type { EntryType, Transaction } from '../../types';
 import { TransactionDetailSheet } from '../transactions/TransactionDetailSheet';
 import { TransactionFormModal } from '../transactions/TransactionForm';
 
+type TypeFilter = 'all' | EntryType;
+
+const TYPE_TABS: Array<ToneTab<TypeFilter>> = [
+  { id: 'all', label: 'Tất cả', tone: 'accent' },
+  { id: 'income', label: 'Thu', tone: 'income' },
+  { id: 'expense', label: 'Chi', tone: 'expense' },
+  { id: 'transfer', label: 'Chuyển', tone: 'accent' },
+];
+
 export const MonthlyCalendar: React.FC = () => {
-  const { transactions, categories, wallets, openAssistant } = useWallet();
+  const { transactions, categories, wallets, openAssistant, deleteTransaction, restoreTransactions } = useWallet();
+  const { showToast } = useToast();
   const [currentDate, setCurrentDate] = useState(new Date());
   const [direction, setDirection] = useState<number>(0);
   const [selectedDay, setSelectedDay] = useState<Date | null>(null);
+  const [typeFilter, setTypeFilter] = useState<TypeFilter>('all');
   const [selectedTransactionId, setSelectedTransactionId] = useState<string | null>(null);
   const [editing, setEditing] = useState<Transaction | null>(null);
   const selectedTransaction = transactions.find((transaction) => transaction.id === selectedTransactionId);
 
   const prevMonth = () => {
     setDirection(-1);
+    setSelectedDay(null);
     setCurrentDate((d) => subMonths(d, 1));
   };
 
   const nextMonth = () => {
     setDirection(1);
+    setSelectedDay(null);
     setCurrentDate((d) => addMonths(d, 1));
   };
 
   const goToday = () => {
     setDirection(0);
+    setSelectedDay(null);
     setCurrentDate(new Date());
   };
 
@@ -84,9 +99,32 @@ export const MonthlyCalendar: React.FC = () => {
     }
   }
 
-  const selectedDayTransactions = selectedDay
-    ? transactions.filter((tx) => tx.date === format(selectedDay, 'yyyy-MM-dd'))
-    : [];
+  // The month's entries, newest first; a tapped day narrows the list to that day
+  const selectedDayKey = selectedDay ? format(selectedDay, 'yyyy-MM-dd') : null;
+  const monthTransactions = transactions
+    .filter((tx) => tx.date.startsWith(monthKey) && (!selectedDayKey || tx.date.slice(0, 10) === selectedDayKey))
+    .toSorted(
+      (a, b) =>
+        b.date.localeCompare(a.date) ||
+        (b.time ?? '').localeCompare(a.time ?? '') ||
+        b.createdAt.localeCompare(a.createdAt)
+    );
+  const listTransactions = typeFilter === 'all'
+    ? monthTransactions
+    : monthTransactions.filter((tx) => tx.type === typeFilter);
+
+  const groups: Array<{ date: string; transactions: Transaction[]; net: number }> = [];
+  for (const tx of listTransactions) {
+    const date = tx.date.slice(0, 10);
+    const net = tx.type === 'income' ? tx.amountVnd : tx.type === 'expense' ? -tx.amountVnd : 0;
+    const last = groups[groups.length - 1];
+    if (last?.date === date) {
+      last.transactions.push(tx);
+      last.net += net;
+    } else {
+      groups.push({ date, transactions: [tx], net });
+    }
+  }
 
   const weekDayHeaders = ['T2', 'T3', 'T4', 'T5', 'T6', 'T7', 'CN'];
   const isCurrentMonthView = isSameMonth(currentDate, new Date());
@@ -151,12 +189,12 @@ export const MonthlyCalendar: React.FC = () => {
       </div>
       </StaggerItem>
 
-      {/* Calendar Grid */}
+      {/* Compact calendar: a glance at which days had money moving, tap a day to narrow the list */}
       <StaggerItem>
-      <Card className="relative z-[1] p-2 sm:p-4 overflow-hidden">
+      <Card className="relative z-[1] p-2 sm:p-3 overflow-hidden">
         <div className="grid grid-cols-7 text-center" aria-hidden="true">
           {weekDayHeaders.map((dayName) => (
-            <div key={dayName} className="py-2 text-xs font-semibold text-muted">
+            <div key={dayName} className="pb-1 text-[11px] font-semibold text-muted">
               {dayName}
             </div>
           ))}
@@ -170,7 +208,7 @@ export const MonthlyCalendar: React.FC = () => {
             animate={{ opacity: 1, x: 0 }}
             exit={{ opacity: 0, x: -direction * 16 }}
             transition={{ duration: 0.15 }}
-            className="grid grid-cols-7 gap-1 sm:gap-1.5"
+            className="grid grid-cols-7 gap-0.5 sm:gap-1"
           >
             {days.map((day) => {
               const dateStr = format(day, 'yyyy-MM-dd');
@@ -186,44 +224,32 @@ export const MonthlyCalendar: React.FC = () => {
                 <button
                   key={dateStr}
                   type="button"
-                  onClick={() => setSelectedDay(day)}
+                  disabled={!isCurrentMonth}
+                  onClick={() => setSelectedDay(isSelected ? null : day)}
                   aria-label={label}
+                  aria-pressed={Boolean(isSelected)}
                   aria-current={isCurrentDay ? 'date' : undefined}
                   className={cn(
-                    'min-h-[64px] sm:min-h-[92px] p-1.5 sm:p-2 rounded-control border text-left flex flex-col justify-between transition-colors min-w-0',
+                    'flex h-11 min-w-0 flex-col items-center justify-center gap-0.5 rounded-control border transition-colors sm:h-14',
                     isSelected
                       ? 'border-accent bg-accent-soft'
                       : isCurrentMonth
-                        ? 'border-rule bg-surface hover:border-rule-strong hover:bg-paper-2'
-                        : 'border-transparent bg-paper-2 text-muted'
+                        ? 'border-transparent hover:bg-paper-2'
+                        : 'border-transparent text-muted opacity-40'
                   )}
                 >
                   <span
                     className={cn(
-                      'figure grid h-6 w-6 place-items-center rounded-full text-xs sm:text-sm font-semibold',
+                      'figure grid h-6 w-6 place-items-center rounded-full text-xs font-semibold sm:text-sm',
                       isCurrentDay ? 'bg-accent text-accent-ink' : isCurrentMonth ? 'text-ink' : 'text-muted'
                     )}
                   >
                     {format(day, 'd')}
                   </span>
-
-                  {dayData && (
-                    <>
-                      {/* Phone cells are too narrow for full amounts: a mark per direction, the amounts open on tap */}
-                      <span className="mt-1 flex w-full justify-center gap-2 sm:hidden" aria-hidden="true">
-                        {dayData.incomeVnd > 0 && <span className="h-1.5 w-1.5 rounded-full bg-income" />}
-                        {dayData.expenseVnd > 0 && <span className="h-1.5 w-1.5 rounded-full bg-expense" />}
-                      </span>
-                      <span className="figure mt-1 hidden space-y-0.5 text-xs font-semibold leading-tight sm:block">
-                        {dayData.incomeVnd > 0 && (
-                          <span className="block truncate text-income">+{formatCurrency(dayData.incomeVnd, 'VND')}</span>
-                        )}
-                        {dayData.expenseVnd > 0 && (
-                          <span className="block truncate text-expense">−{formatCurrency(dayData.expenseVnd, 'VND')}</span>
-                        )}
-                      </span>
-                    </>
-                  )}
+                  <span className="flex h-1.5 gap-1" aria-hidden="true">
+                    {isCurrentMonth && dayData?.incomeVnd > 0 && <span className="h-1.5 w-1.5 rounded-full bg-income" />}
+                    {isCurrentMonth && dayData?.expenseVnd > 0 && <span className="h-1.5 w-1.5 rounded-full bg-expense" />}
+                  </span>
                 </button>
               );
             })}
@@ -232,63 +258,77 @@ export const MonthlyCalendar: React.FC = () => {
       </Card>
       </StaggerItem>
 
-      {/* Modal: Chi tiết giao dịch ngày được bấm */}
-      <Modal
-        isOpen={Boolean(selectedDay)}
-        onClose={() => setSelectedDay(null)}
-        title={selectedDay ? `Giao dịch ngày ${formatDate(selectedDay)}` : ''}
-        description={
-          selectedDayTransactions.length > 0
-            ? `${selectedDayTransactions.length} giao dịch`
-            : 'Chưa có giao dịch nào trong ngày này'
-        }
-      >
-        {selectedDayTransactions.length === 0 ? (
-          <div className="py-6 text-center">
-            <p className="text-sm text-muted">Ngày này chưa phát sinh thu chi.</p>
-            <Button
-              variant="primary"
-              className="mt-4"
-              onClick={() => {
-                openAssistant();
-              }}
+      {/* The month's transactions, like "Xem tất cả" but scoped to the month shown */}
+      <StaggerItem>
+      <div className="relative z-[1] space-y-3">
+        <ToneTabs tabs={TYPE_TABS} value={typeFilter} onChange={setTypeFilter} label="Lọc nhanh loại giao dịch" />
+
+        <div className="flex min-h-10 items-center justify-between gap-3 px-1">
+          <h2 className="text-base text-ink">
+            Giao dịch
+            <span className="ml-1.5 text-sm font-normal text-muted">({listTransactions.length})</span>
+          </h2>
+          {selectedDay && (
+            <button
+              type="button"
+              onClick={() => setSelectedDay(null)}
+              className="inline-flex items-center gap-1 rounded-pill bg-accent-soft px-3 py-1.5 text-xs font-semibold text-accent"
+              aria-label={`Bỏ lọc ngày ${formatDate(selectedDay)}`}
             >
-              <Plus className="w-4 h-4" aria-hidden="true" />
-              <span>Thêm giao dịch</span>
-            </Button>
-          </div>
-        ) : (
-          <>
-            <ul className="divide-y divide-rule -mt-3">
-              {selectedDayTransactions.map((tx) => (
-                <TransactionRow
-                  key={tx.id}
-                  tx={tx}
-                  category={categories.find((c) => c.id === tx.categoryId)}
-                  wallet={wallets.find((w) => w.id === tx.walletId)}
-                  toWallet={tx.toWalletId ? wallets.find((w) => w.id === tx.toWalletId) : undefined}
-                  showDate={false}
-                  onOpen={(transaction) => setSelectedTransactionId(transaction.id)}
-                />
-              ))}
-            </ul>
-            {(
-              <p className="figure mt-3 border-t border-rule pt-3 text-right text-sm text-muted">
-                Tổng trong ngày:{' '}
-                <span className="font-bold text-ink">
-                  {formatCurrency(
-                    selectedDayTransactions.reduce(
-                      (sum, tx) => sum + (tx.type === 'income' ? tx.amountVnd : tx.type === 'expense' ? -tx.amountVnd : 0),
-                      0
-                    ),
-                    'VND'
-                  )}
-                </span>
+              Ngày {format(selectedDay, 'dd/MM')}
+              <X className="h-3.5 w-3.5" aria-hidden="true" />
+            </button>
+          )}
+        </div>
+
+        <Card className="overflow-clip p-0 sm:p-0">
+          {groups.length === 0 ? (
+            <div className="px-4 py-10 text-center">
+              <p className="text-sm text-muted">
+                {selectedDay ? 'Ngày này chưa phát sinh giao dịch phù hợp.' : 'Tháng này chưa có giao dịch phù hợp.'}
               </p>
-            )}
-          </>
-        )}
-      </Modal>
+              <Button variant="primary" className="mt-4" onClick={() => openAssistant()}>
+                <Plus className="w-4 h-4" aria-hidden="true" />
+                <span>Thêm giao dịch</span>
+              </Button>
+            </div>
+          ) : (
+            groups.map((group) => (
+              <section key={group.date}>
+                <div className="sticky top-[calc(3.5rem+env(safe-area-inset-top))] z-10 flex items-center justify-between gap-3 border-y border-rule bg-paper/90 px-4 py-2 backdrop-blur sm:px-5">
+                  <h3 className="text-sm font-semibold text-ink">{formatShortDate(group.date)}</h3>
+                  <span className="figure text-sm text-muted">
+                    {formatSigned(Math.abs(group.net), 'VND', group.net >= 0 ? '+' : '−')}
+                  </span>
+                </div>
+                <ul className="divide-y divide-rule px-4 sm:px-5">
+                  {group.transactions.map((tx) => (
+                    <TransactionRow
+                      key={tx.id}
+                      tx={tx}
+                      category={categories.find((c) => c.id === tx.categoryId)}
+                      wallet={wallets.find((w) => w.id === tx.walletId)}
+                      toWallet={tx.toWalletId ? wallets.find((w) => w.id === tx.toWalletId) : undefined}
+                      showDate={false}
+                      onEdit={setEditing}
+                      onOpen={(transaction) => setSelectedTransactionId(transaction.id)}
+                      onDelete={(id) => {
+                        const removed = deleteTransaction(id);
+                        showToast({
+                          message: 'Đã xóa giao dịch',
+                          actionLabel: 'Hoàn tác',
+                          onAction: () => restoreTransactions(removed),
+                        });
+                      }}
+                    />
+                  ))}
+                </ul>
+              </section>
+            ))
+          )}
+        </Card>
+      </div>
+      </StaggerItem>
       <TransactionDetailSheet
         isOpen={Boolean(selectedTransaction)}
         onClose={() => setSelectedTransactionId(null)}

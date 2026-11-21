@@ -5,5 +5,6 @@ import receipt from './receipt.webp';
 import categories from './categories.webp';
 import chart from './chart.webp';
 import calendar from './calendar.webp';
+import income from './income.webp';
 
-export const CARD_ART = { balance, wallets, receipt, categories, chart, calendar };
+export const CARD_ART = { balance, wallets, receipt, categories, chart, calendar, income };
