@@ -17,6 +17,8 @@ export interface Wallet {
   initialBalance: number;
   /** For a credit card, negative means money owed */
   currentBalance: number;
+  /** When it was last created or edited (ISO); lets copies from different devices merge */
+  updatedAt?: string;
   color: string;
   icon: string; // lucide icon name
   isDefault?: boolean;
@@ -35,6 +37,8 @@ export interface Category {
   isDefault?: boolean;
   /** Expense categories: monthly spending limit in VND (undefined = no budget) */
   budget?: number;
+  /** When it was last created or edited (ISO) */
+  updatedAt?: string;
 }
 
 export interface Transaction {
@@ -65,6 +69,8 @@ export interface Transaction {
   transferId?: string;
   isAiGenerated?: boolean;
   createdAt: string;
+  /** When it was last created or edited (ISO) */
+  updatedAt?: string;
 }
 
 /** Options when moving money between your own wallets */

@@ -109,11 +109,29 @@ export function passkeysSupported(): boolean {
   return typeof window !== 'undefined' && typeof window.PublicKeyCredential === 'function';
 }
 
-export type SyncKey ='wallets' | 'categories' | 'transactions' | 'preferences';
+export type SyncKey = 'wallets' | 'categories' | 'transactions' | 'preferences';
+
+export interface DataVersion {
+  id: number;
+  key: 'wallets' | 'categories' | 'transactions';
+  savedAt: number;
+  replacedAt: number;
+  count: number | null;
+}
 
 export const dataApi = {
-  load: () => api<{ data: Partial<Record<SyncKey, { value: unknown; updatedAt: number }>> }>('/api/data'),
-  /** `baseUpdatedAt`: the server version this copy was built on; a newer server copy answers 409 */
-  save: (key: SyncKey, value: unknown, baseUpdatedAt: number) =>
-    api<{ ok: true; updatedAt: number }>(`/api/data/${key}`, { method: 'PUT', body: { value, baseUpdatedAt } }),
+  load: () => api<{ data: Partial<Record<SyncKey | 'tombstones', { value: unknown; updatedAt: number }>> }>('/api/data'),
+  /**
+   * Lists are merged on the server, never overwritten; `tombstones` lists what this device deleted.
+   * `value` comes back when the stored result differs from what was sent.
+   */
+  save: (key: SyncKey, value: unknown, baseUpdatedAt: number, tombstones?: Record<string, number>) =>
+    api<{ ok: true; updatedAt: number; value?: unknown }>(`/api/data/${key}`, {
+      method: 'PUT',
+      body: { value, baseUpdatedAt, ...(tombstones ? { tombstones } : {}) },
+    }),
+  history: () => api<{ versions: DataVersion[] }>('/api/data/history'),
+  /** Adds back what a saved version (or a backup file) has and the account is missing; never removes anything */
+  restore: (source: { id: number } | { docs: Record<string, unknown> }) =>
+    api<{ ok: true; restored: Partial<Record<DataVersion['key'], number>> }>('/api/data/restore', { method: 'POST', body: source }),
 };

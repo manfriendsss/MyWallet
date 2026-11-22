@@ -14,6 +14,7 @@ import type { AiProvider } from '../../types';
 import { callGeminiApi, callDeepSeekApi } from '../../services/ai';
 import { DEFAULT_AI_SETTINGS, SERVER_KEY } from '../../services/ai';
 import { Stagger, StaggerItem } from '../ui/Stagger';
+import { DataRecoveryRows } from './DataRecovery';
 
 const GEMINI_MODEL_OPTIONS = [
   { value: 'gemini-3.8-flash', label: 'Gemini 3.8 Flash', hint: 'mới nhất, khuyên dùng' },
@@ -527,11 +528,12 @@ export const SettingsView: React.FC = () => {
               </Button>
             }
           />
+          <DataRecoveryRows Row={SettingRow} />
           <SettingRow
             icon={RotateCcw}
             danger
             title="Xóa toàn bộ dữ liệu"
-            description="Ví và giao dịch, không thể hoàn tác"
+            description="Ví và giao dịch; vẫn khôi phục được trong Lịch sử thay đổi"
             action={
               <Button
                 variant="danger"
@@ -539,7 +541,7 @@ export const SettingsView: React.FC = () => {
                 onClick={() => {
                   if (
                     window.confirm(
-                      'Xóa toàn bộ ví và giao dịch, trên máy này và trên máy chủ? Danh mục trở về mặc định.\n\nKhông thể hoàn tác. Hãy tải bản sao lưu trước nếu cần.'
+                      'Xóa toàn bộ ví và giao dịch, trên máy này và trên máy chủ? Danh mục trở về mặc định.\n\nNếu đổi ý, vào Lịch sử thay đổi để khôi phục.'
                     )
                   ) {
                     resetAllData();

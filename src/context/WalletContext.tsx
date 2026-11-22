@@ -39,8 +39,9 @@ import {
   loadTransactions,
 } from '../services/storage';
 import { newId, toLocalISODate } from '../utils/date';
-import { ApiError, dataApi, type SyncKey } from '../services/api';
-import { mergeDocument, readVersions, writeVersions } from '../services/syncMerge';
+import { dataApi, type SyncKey } from '../services/api';
+import { mergeTombstones, type ListKey, type Tombstones } from '../services/syncMerge';
+import { readTombstones, readVersions, trackChanges, writeTombstones, writeVersions } from '../services/syncTracking';
 import {
   APP_HISTORY_KEY,
   readAppHistoryEntry,
@@ -180,35 +181,35 @@ export const WalletProvider: React.FC<{ children: React.ReactNode; syncEnabled?:
   const dataRef = useRef({ wallets, categories, transactions });
   dataRef.current = { wallets, categories, transactions };
 
+  // Deletions made on this device (and learned from the server): id -> deletedAt
+  const tombstonesRef = useRef<Tombstones>(readTombstones());
+  const addTombstoneMaps = (incoming: Tombstones) => {
+    tombstonesRef.current = mergeTombstones(tombstonesRef.current, incoming);
+    writeTombstones(tombstonesRef.current);
+  };
+  const recordDeletions = (key: ListKey, ids: string[]) => {
+    if (!ids.length) return;
+    const now = Date.now();
+    addTombstoneMaps({ [key]: Object.fromEntries(ids.map((id) => [id, now])) });
+  };
+
   /**
-   * Save one document on top of the server version this device last saw. If another device saved
-   * in between, merge both copies (nothing added on either side is lost) and save the merge.
-   * Returns the merged copy when one was needed, so the caller can show it.
+   * Save one document. The server merges lists into what it has (nothing is lost unless a deletion
+   * was recorded), so a stale copy can never erase newer data. Returns the stored result when it
+   * differs from what was sent, so the caller can show it.
    */
   const saveDoc = async (key: SyncKey, value: unknown): Promise<{ value: unknown; merged: boolean }> => {
-    let current = value;
-    let merged = false;
-    for (let attempt = 0; attempt < 4; attempt++) {
-      const base = versionsRef.current[key] ?? 0;
-      try {
-        const { updatedAt } = await dataApi.save(key, current, base);
-        setVersion(key, updatedAt);
-        lastPushed.current[key] = JSON.stringify(current);
-        return { value: current, merged };
-      } catch (error) {
-        if (!(error instanceof ApiError) || error.status !== 409) throw error;
-        let remote = (error.data as { current?: { value: unknown; updatedAt: number } } | null)?.current;
-        if (!remote || typeof remote.updatedAt !== 'number') {
-          const { data } = await dataApi.load();
-          remote = data[key];
-        }
-        if (!remote) throw error;
-        current = mergeDocument(key, current, remote.value, base);
-        setVersion(key, remote.updatedAt);
-        merged = true;
-      }
-    }
-    throw new Error('Không đồng bộ được dữ liệu, thử lại sau.');
+    const isList = key !== 'preferences';
+    const res = await dataApi.save(
+      key,
+      value,
+      versionsRef.current[key] ?? 0,
+      isList ? (tombstonesRef.current[key as ListKey] ?? {}) : undefined
+    );
+    setVersion(key, res.updatedAt);
+    if (res.value !== undefined) return { value: res.value, merged: true };
+    lastPushed.current[key] = JSON.stringify(value);
+    return { value, merged: false };
   };
 
   /** Show a document that came back merged with another device's changes */
@@ -235,6 +236,10 @@ export const WalletProvider: React.FC<{ children: React.ReactNode; syncEnabled?:
     saveWallets(next.wallets);
     saveTransactions(next.transactions);
     saveCategories(next.categories);
+    // This is what the server holds now (balances are recomputed on every device): nothing to push back
+    lastPushed.current[key] = JSON.stringify(
+      key === 'wallets' ? next.wallets : key === 'transactions' ? next.transactions : next.categories
+    );
   };
 
   // Tabs are real navigation levels even though this is a single-page app.
@@ -325,6 +330,7 @@ export const WalletProvider: React.FC<{ children: React.ReactNode; syncEnabled?:
       const version = remote[key]?.updatedAt;
       if (typeof version === 'number') setVersion(key, version);
     }
+    if (remote.tombstones?.value) addTombstoneMaps(remote.tombstones.value as Tombstones);
     const hasRemote = Array.isArray(remote.wallets?.value) || Array.isArray(remote.transactions?.value);
     const next = hasRemote
       ? recalculateWalletBalances(
@@ -396,6 +402,26 @@ export const WalletProvider: React.FC<{ children: React.ReactNode; syncEnabled?:
   }, []);
 
 
+  // Back to the app after a while (a phone keeps it alive in the background for days): fetch the
+  // latest data first, sending this device's own unsaved changes before anything is pulled.
+  useEffect(() => {
+    if (!syncEnabled) return;
+    let hiddenAt = 0;
+    const onVisibility = () => {
+      if (document.visibilityState === 'hidden') {
+        hiddenAt = Date.now();
+        return;
+      }
+      if (!syncedRef.current || !hiddenAt || Date.now() - hiddenAt < 30_000) return;
+      hiddenAt = 0;
+      pullFromServer().catch(() => setSyncStatus('error'));
+    };
+    document.addEventListener('visibilitychange', onVisibility);
+    return () => document.removeEventListener('visibilitychange', onVisibility);
+    // pullFromServer reads refs and storage only
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [syncEnabled]);
+
   // Back online: send whatever was changed while offline
   useEffect(() => {
     if (!syncEnabled) return;
@@ -457,8 +483,21 @@ export const WalletProvider: React.FC<{ children: React.ReactNode; syncEnabled?:
   const closeAssistant = () => setIsAssistantOpen(false);
 
   // Recalculate helper
-  const syncState = (newWallets: Wallet[], newTxs: Transaction[], newCats?: Category[]) => {
-    markPending('wallets', 'transactions', ...(newCats ? (['categories'] as SyncKey[]) : []));
+  const syncState = (rawWallets: Wallet[], rawTxs: Transaction[], rawCats?: Category[]) => {
+    markPending('wallets', 'transactions', ...(rawCats ? (['categories'] as SyncKey[]) : []));
+    // Stamp what the user changed and remember what they deleted, so other devices merge it correctly
+    const w = trackChanges('wallets', wallets, rawWallets);
+    const t = trackChanges('transactions', transactions, rawTxs);
+    recordDeletions('wallets', w.removed);
+    recordDeletions('transactions', t.removed);
+    const newWallets = w.list;
+    const newTxs = t.list;
+    let newCats: Category[] | undefined;
+    if (rawCats) {
+      const c = trackChanges('categories', categories, rawCats);
+      recordDeletions('categories', c.removed);
+      newCats = c.list;
+    }
     const catsToUse = newCats || categories;
     const recalculated = recalculateWalletBalances(newWallets, newTxs, catsToUse);
     setWallets(recalculated.wallets);
@@ -666,30 +705,28 @@ export const WalletProvider: React.FC<{ children: React.ReactNode; syncEnabled?:
   };
 
   // Categories Actions
+  const commitCategories = (raw: Category[]) => {
+    const { list, removed } = trackChanges('categories', categories, raw);
+    recordDeletions('categories', removed);
+    markPending('categories');
+    setCategories(list);
+    saveCategories(list);
+  };
   const addCategory = (categoryData: Omit<Category, 'id'>): Category => {
     const newCat: Category = {
       ...categoryData,
       id: newId('c'),
     };
-    const newCats = [...categories, newCat];
-    markPending('categories');
-    setCategories(newCats);
-    saveCategories(newCats);
+    commitCategories([...categories, newCat]);
     return newCat;
   };
 
   const updateCategory = (id: string, updates: Partial<Category>) => {
-    const newCats = categories.map((c) => (c.id === id ? { ...c, ...updates } : c));
-    markPending('categories');
-    setCategories(newCats);
-    saveCategories(newCats);
+    commitCategories(categories.map((c) => (c.id === id ? { ...c, ...updates } : c)));
   };
 
   const deleteCategory = (id: string) => {
-    const newCats = categories.filter((c) => c.id !== id);
-    markPending('categories');
-    setCategories(newCats);
-    saveCategories(newCats);
+    commitCategories(categories.filter((c) => c.id !== id));
   };
 
   // Rates & Settings
@@ -715,7 +752,19 @@ export const WalletProvider: React.FC<{ children: React.ReactNode; syncEnabled?:
   };
 
   const resetAllData = () => {
+    // A deliberate wipe: record every entry as deleted, or the server would keep (merge back) them
+    const deleted: Tombstones = {
+      wallets: Object.fromEntries(wallets.map((w) => [w.id, Date.now()])),
+      transactions: Object.fromEntries(transactions.map((t) => [t.id, Date.now()])),
+      // Default categories come straight back after a reset, so only custom ones are deleted
+      categories: Object.fromEntries(
+        categories.filter((c) => !INITIAL_CATEGORIES.some((d) => d.id === c.id)).map((c) => [c.id, Date.now()])
+      ),
+    };
+    const versions = versionsRef.current;
     localStorage.clear();
+    writeVersions(versions);
+    addTombstoneMaps(deleted);
     clearStoredAiKeys();
     markPending(...ALL_KEYS);
     const data = initializeStorageIfNeeded();
