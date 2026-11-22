@@ -8,7 +8,7 @@ export interface D1PreparedStatement {
   bind(...values: unknown[]): D1PreparedStatement;
   first<T = Record<string, unknown>>(): Promise<T | null>;
   all<T = Record<string, unknown>>(): Promise<D1Result<T>>;
-  run(): Promise<unknown>;
+  run(): Promise<{ meta: { changes: number } }>;
 }
 
 export interface D1Database {

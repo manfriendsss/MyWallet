@@ -39,7 +39,8 @@ import {
   loadTransactions,
 } from '../services/storage';
 import { newId, toLocalISODate } from '../utils/date';
-import { dataApi, type SyncKey } from '../services/api';
+import { ApiError, dataApi, type SyncKey } from '../services/api';
+import { mergeDocument, readVersions, writeVersions } from '../services/syncMerge';
 import {
   APP_HISTORY_KEY,
   readAppHistoryEntry,
@@ -156,6 +157,12 @@ export const WalletProvider: React.FC<{ children: React.ReactNode; syncEnabled?:
   // The server copy has been loaded (or seeded): from here on, local changes are pushed up
   const syncedRef = useRef(false);
   const lastPushed = useRef<Partial<Record<SyncKey, string>>>({});
+  // The server version each document was last seen at; every save is based on it
+  const versionsRef = useRef(readVersions());
+  const setVersion = (key: SyncKey, version: number) => {
+    versionsRef.current = { ...versionsRef.current, [key]: version };
+    writeVersions(versionsRef.current);
+  };
   const [isAssistantOpen, setIsAssistantOpen] = useState<boolean>(false);
 
   const [isReady, setIsReady] = useState<boolean>(false);
@@ -168,6 +175,67 @@ export const WalletProvider: React.FC<{ children: React.ReactNode; syncEnabled?:
   useEffect(() => {
     activeTabRef.current = activeTab;
   }, [activeTab]);
+
+  // Latest data for async sync callbacks, which outlive the render that started them
+  const dataRef = useRef({ wallets, categories, transactions });
+  dataRef.current = { wallets, categories, transactions };
+
+  /**
+   * Save one document on top of the server version this device last saw. If another device saved
+   * in between, merge both copies (nothing added on either side is lost) and save the merge.
+   * Returns the merged copy when one was needed, so the caller can show it.
+   */
+  const saveDoc = async (key: SyncKey, value: unknown): Promise<{ value: unknown; merged: boolean }> => {
+    let current = value;
+    let merged = false;
+    for (let attempt = 0; attempt < 4; attempt++) {
+      const base = versionsRef.current[key] ?? 0;
+      try {
+        const { updatedAt } = await dataApi.save(key, current, base);
+        setVersion(key, updatedAt);
+        lastPushed.current[key] = JSON.stringify(current);
+        return { value: current, merged };
+      } catch (error) {
+        if (!(error instanceof ApiError) || error.status !== 409) throw error;
+        let remote = (error.data as { current?: { value: unknown; updatedAt: number } } | null)?.current;
+        if (!remote || typeof remote.updatedAt !== 'number') {
+          const { data } = await dataApi.load();
+          remote = data[key];
+        }
+        if (!remote) throw error;
+        current = mergeDocument(key, current, remote.value, base);
+        setVersion(key, remote.updatedAt);
+        merged = true;
+      }
+    }
+    throw new Error('Không đồng bộ được dữ liệu, thử lại sau.');
+  };
+
+  /** Show a document that came back merged with another device's changes */
+  const applyMerged = (key: SyncKey, value: unknown) => {
+    const { wallets: w, categories: c, transactions: t } = dataRef.current;
+    if (key === 'preferences') {
+      const prefs = pickPreferences(value as Partial<AiSettings>);
+      setAiSettingsState((cur) => {
+        const next = { ...cur, ...prefs };
+        saveStoredAiSettings(next);
+        return next;
+      });
+      lastPushed.current.preferences = JSON.stringify(prefs);
+      return;
+    }
+    const next = recalculateWalletBalances(
+      key === 'wallets' ? (value as Wallet[]) : w,
+      key === 'transactions' ? (value as Transaction[]) : t,
+      key === 'categories' ? (value as Category[]) : c
+    );
+    setWallets(next.wallets);
+    setTransactions(next.transactions);
+    setCategories(next.categories);
+    saveWallets(next.wallets);
+    saveTransactions(next.transactions);
+    saveCategories(next.categories);
+  };
 
   // Tabs are real navigation levels even though this is a single-page app.
   // This makes browser/Android back retrace menus and only leave from Home.
@@ -239,10 +307,9 @@ export const WalletProvider: React.FC<{ children: React.ReactNode; syncEnabled?:
       preferences: () => pickPreferences(getStoredAiSettings()),
     };
     for (const key of pending) {
-      const value = local[key]();
-      await dataApi.save(key, value);
+      // Based on the version this copy came from: an older copy is merged, never written over newer data
+      await saveDoc(key, local[key]());
       clearPending(key);
-      lastPushed.current[key] = JSON.stringify(value);
     }
   };
 
@@ -254,6 +321,10 @@ export const WalletProvider: React.FC<{ children: React.ReactNode; syncEnabled?:
     // Local edits that never reached the server win: push them first, and stop if that fails
     await flushPending();
     const { data: remote } = await dataApi.load();
+    for (const key of ALL_KEYS) {
+      const version = remote[key]?.updatedAt;
+      if (typeof version === 'number') setVersion(key, version);
+    }
     const hasRemote = Array.isArray(remote.wallets?.value) || Array.isArray(remote.transactions?.value);
     const next = hasRemote
       ? recalculateWalletBalances(
@@ -272,9 +343,9 @@ export const WalletProvider: React.FC<{ children: React.ReactNode; syncEnabled?:
 
     if (!hasRemote) {
       await Promise.all([
-        dataApi.save('wallets', next.wallets),
-        dataApi.save('categories', next.categories),
-        dataApi.save('transactions', next.transactions),
+        saveDoc('wallets', next.wallets),
+        saveDoc('categories', next.categories),
+        saveDoc('transactions', next.transactions),
       ]);
     }
     lastPushed.current = {
@@ -355,10 +426,9 @@ export const WalletProvider: React.FC<{ children: React.ReactNode; syncEnabled?:
     const timer = setTimeout(() => {
       Promise.all(
         changed.map(async (k) => {
-          const text = JSON.stringify(docs[k]);
-          await dataApi.save(k, docs[k]);
-          lastPushed.current[k] = text;
+          const result = await saveDoc(k, docs[k]);
           clearPending(k);
+          if (result.merged) applyMerged(k, result.value);
         })
       )
         .then(() => setSyncStatus('saved'))

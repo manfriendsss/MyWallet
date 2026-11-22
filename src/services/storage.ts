@@ -52,6 +52,7 @@ export function clearLocalWalletData(): void {
     for (const key of Object.values(KEYS)) localStorage.removeItem(key);
     localStorage.removeItem('mywallet_ai_settings');
     localStorage.removeItem('mywallet_sync_pending');
+    localStorage.removeItem('mywallet_sync_versions');
     sessionStorage.clear();
   } catch {
     // storage unavailable: nothing to clear

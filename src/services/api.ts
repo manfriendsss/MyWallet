@@ -2,9 +2,12 @@
 
 export class ApiError extends Error {
   status: number;
-  constructor(message: string, status: number) {
+  /** The parsed response body, e.g. the server's current copy on a 409 conflict */
+  data: unknown;
+  constructor(message: string, status: number, data: unknown = null) {
     super(message);
     this.status = status;
+    this.data = data;
   }
 }
 
@@ -29,7 +32,7 @@ export async function api<T = unknown>(path: string, init: { method?: string; bo
   if (!res.ok) {
     if (res.status === 401 && !path.startsWith('/api/auth/')) window.dispatchEvent(new Event(SESSION_EXPIRED_EVENT));
     const message = (data as { error?: { message?: string } } | null)?.error?.message;
-    throw new ApiError(message || `Lỗi máy chủ (${res.status})`, res.status);
+    throw new ApiError(message || `Lỗi máy chủ (${res.status})`, res.status, data);
   }
   return data as T;
 }
@@ -110,5 +113,7 @@ export type SyncKey ='wallets' | 'categories' | 'transactions' | 'preferences';
 
 export const dataApi = {
   load: () => api<{ data: Partial<Record<SyncKey, { value: unknown; updatedAt: number }>> }>('/api/data'),
-  save: (key: SyncKey, value: unknown) => api<{ ok: true; updatedAt: number }>(`/api/data/${key}`, { method: 'PUT', body: { value } }),
+  /** `baseUpdatedAt`: the server version this copy was built on; a newer server copy answers 409 */
+  save: (key: SyncKey, value: unknown, baseUpdatedAt: number) =>
+    api<{ ok: true; updatedAt: number }>(`/api/data/${key}`, { method: 'PUT', body: { value, baseUpdatedAt } }),
 };
